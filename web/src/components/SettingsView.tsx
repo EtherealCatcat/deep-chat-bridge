@@ -1,0 +1,691 @@
+import { useEffect, useState } from "react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
+  Cpu,
+  FlaskConical,
+  Gauge,
+  Globe2,
+  LoaderCircle,
+  MessageCircleHeart,
+  Moon,
+  Save,
+  Server,
+  Settings2,
+  Wallet,
+} from "lucide-react";
+import { api, clockToMin, formatTime, minToClock } from "../api";
+import type { AppConfig, SettingsPayload } from "../types";
+import { Badge, Card, Labeled, Loading, SectionTitle } from "./ui";
+
+function Toggle({
+  checked,
+  onChange,
+  label,
+  hint,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  label: string;
+  hint?: string;
+}) {
+  return (
+    <button type="button" onClick={() => onChange(!checked)} className="flex w-full items-center justify-between gap-4 text-left">
+      <span>
+        <span className="block text-[12.5px] font-medium text-ink">{label}</span>
+        {hint ? <span className="mt-0.5 block text-[10px] leading-4 text-ink-faint">{hint}</span> : null}
+      </span>
+      <span
+        className={`relative h-[22px] w-[38px] shrink-0 rounded-full border transition ${
+          checked ? "border-sea/40 bg-sea" : "border-line bg-ink/10"
+        }`}
+      >
+        <span
+          className={`absolute top-[2px] h-4 w-4 rounded-full bg-white shadow-sm transition-all ${
+            checked ? "left-[18px]" : "left-[2px]"
+          }`}
+        />
+      </span>
+    </button>
+  );
+}
+
+function PriceTable({ prices }: { prices: SettingsPayload["prices"] }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-line/60">
+      <table className="w-full text-left text-[10px]">
+        <thead className="bg-ink/5 text-ink-faint">
+          <tr>
+            <th className="px-2.5 py-2 font-normal">模型</th>
+            <th className="px-2.5 py-2 text-right font-normal">缓存命中</th>
+            <th className="px-2.5 py-2 text-right font-normal">未命中</th>
+            <th className="px-2.5 py-2 text-right font-normal">输出</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.values(prices).map((item) => (
+            <tr key={item.key} className="border-t border-line/40">
+              <td className="px-2.5 py-2 text-ink-soft">{item.label}</td>
+              <td className="px-2.5 py-2 text-right font-mono text-ink-faint">
+                {item.offPeak.hit}/{item.peak.hit}
+              </td>
+              <td className="px-2.5 py-2 text-right font-mono text-ink-faint">
+                {item.offPeak.miss}/{item.peak.miss}
+              </td>
+              <td className="px-2.5 py-2 text-right font-mono text-ink-faint">
+                {item.offPeak.output}/{item.peak.output}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function SettingsView({ showToast }: { showToast: (text: string, kind?: "info" | "error") => void }) {
+  const [payload, setPayload] = useState<SettingsPayload | null>(null);
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  async function load() {
+    try {
+      const data = await api.settings();
+      setPayload(data);
+      setConfig(data.config);
+      setApiKey("");
+      setDirty(false);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "读取设置失败。", "error");
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  function edit(next: AppConfig) {
+    setConfig(next);
+    setDirty(true);
+  }
+
+  const patchModel = (value: Partial<AppConfig["model"]>) =>
+    config && edit({ ...config, model: { ...config.model, ...value } });
+  const patchBehavior = (value: Partial<AppConfig["behavior"]>) =>
+    config && edit({ ...config, behavior: { ...config.behavior, ...value } });
+  const patchLife = (value: Partial<AppConfig["life"]>) =>
+    config && edit({ ...config, life: { ...config.life, ...value } });
+  const patchSpeak = (value: Partial<AppConfig["speak"]>) =>
+    config && edit({ ...config, speak: { ...config.speak, ...value } });
+  const patchMood = (value: Partial<AppConfig["mood"]>) =>
+    config && edit({ ...config, mood: { ...config.mood, ...value } });
+  const patchCost = (value: Partial<AppConfig["cost"]>) =>
+    config && edit({ ...config, cost: { ...config.cost, ...value } });
+  const patchWeb = (value: Partial<AppConfig["web"]>) =>
+    config && edit({ ...config, web: { ...config.web, ...value } });
+  const patchUi = (value: Partial<AppConfig["ui"]>) =>
+    config && edit({ ...config, ui: { ...config.ui, ...value } });
+
+  function effectiveConfig(): AppConfig | null {
+    if (!config) return null;
+    return {
+      ...config,
+      model: { ...config.model, apiKey: apiKey.trim() || config.model.apiKey },
+    };
+  }
+
+  async function save() {
+    const next = effectiveConfig();
+    if (!next || saving) return;
+    setSaving(true);
+    try {
+      const result = await api.saveSettings(next);
+      setPayload((old) => (old ? { ...old, config: result.config } : old));
+      setConfig(result.config);
+      setApiKey("");
+      setDirty(false);
+      setTestResult(null);
+      showToast(result.note ?? "设置已保存，下一轮生效。");
+      await load();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "保存失败。", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function test() {
+    const next = effectiveConfig();
+    if (!next || testing) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await api.testModel(next);
+      setTestResult({
+        ok: result.ok,
+        text: result.ok ? `连接正常：${result.text ?? "在的"}${result.model ? `（${result.model}）` : ""}` : result.error ?? "连接失败。",
+      });
+    } catch (error) {
+      setTestResult({ ok: false, text: error instanceof Error ? error.message : "连接失败。" });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  if (!payload || !config) {
+    return (
+      <div className="mx-auto w-full max-w-5xl px-5 py-7 sm:px-8">
+        <SectionTitle eyebrow="SETTINGS" title="设置" desc="模型、作息、花销，都在这里。" />
+        <Loading />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-5xl px-5 py-7 sm:px-8">
+      <SectionTitle
+        eyebrow="SETTINGS"
+        title="设置"
+        desc={`数据目录：${payload.root}`}
+        action={
+          <div className="flex items-center gap-2">
+            {dirty ? (
+              <Badge tone="coral">未保存</Badge>
+            ) : (
+              <Badge tone="sea">
+                <CheckCircle2 className="h-2.5 w-2.5" /> 已同步
+              </Badge>
+            )}
+            <button type="button" onClick={() => void save()} disabled={saving || !dirty} className="btn-primary">
+              {saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              保存
+            </button>
+          </div>
+        }
+      />
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Card className="p-5 sm:p-6">
+          <div className="mb-4 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+            <Cpu className="h-3 w-3" />
+            模型
+          </div>
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Labeled label="提供方">
+                <select
+                  value={config.model.provider}
+                  onChange={(event) => patchModel({ provider: event.target.value as AppConfig["model"]["provider"] })}
+                  className="input-warm"
+                >
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="openai-compatible">OpenAI 兼容</option>
+                </select>
+              </Labeled>
+              <Labeled label="模型">
+                <input
+                  list="model-options"
+                  value={config.model.model}
+                  onChange={(event) => patchModel({ model: event.target.value })}
+                  className="input-warm"
+                />
+                <datalist id="model-options">
+                  {payload.modelOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </datalist>
+              </Labeled>
+            </div>
+            <Labeled label="API 地址" hint="兼容 OpenAI 的 /chat/completions">
+              <input
+                value={config.model.baseUrl}
+                onChange={(event) => patchModel({ baseUrl: event.target.value })}
+                className="input-warm"
+                spellCheck={false}
+              />
+            </Labeled>
+            <Labeled label="API Key" hint={config.model.apiKey ? "已保存，留空不改" : "还没有填"}>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(event) => {
+                  setApiKey(event.target.value);
+                  setDirty(true);
+                }}
+                placeholder={config.model.apiKey ? "••••••••（已保存）" : "sk-..."}
+                className="input-warm"
+                autoComplete="off"
+              />
+            </Labeled>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Labeled label="副模型" hint="心情/整理用">
+                <input
+                  value={config.model.sideModel}
+                  onChange={(event) => patchModel({ sideModel: event.target.value })}
+                  className="input-warm"
+                />
+              </Labeled>
+              <Labeled label="温度" hint="0–2">
+                <input
+                  type="number"
+                  min={0}
+                  max={2}
+                  step={0.1}
+                  value={config.model.temperature}
+                  onChange={(event) => patchModel({ temperature: Number(event.target.value) })}
+                  className="input-warm"
+                />
+              </Labeled>
+            </div>
+            <div className="border-t border-line/50 pt-4">
+              <Toggle
+                checked={config.model.thinking}
+                onChange={(value) => patchModel({ thinking: value })}
+                label="思考模式"
+                hint="更聪明但更慢更贵；日常聊天建议关闭。"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => void test()} disabled={testing} className="btn-ghost">
+                {testing ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5" />}
+                测试连接
+              </button>
+              {testResult ? (
+                <span className={`inline-flex items-center gap-1 text-[10px] ${testResult.ok ? "text-sea-deep" : "text-coral-deep"}`}>
+                  {testResult.ok ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                  {testResult.text}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        </Card>
+
+        <div className="space-y-5">
+          <Card className="p-5 sm:p-6">
+            <div className="mb-4 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+              <Settings2 className="h-3 w-3" />
+              称呼
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Labeled label="她的名字">
+                <input
+                  value={config.name}
+                  onChange={(event) => edit({ ...config, name: event.target.value })}
+                  className="input-warm"
+                />
+              </Labeled>
+              <Labeled label="她怎么叫你">
+                <input
+                  value={config.ownerTitle}
+                  onChange={(event) => edit({ ...config, ownerTitle: event.target.value })}
+                  className="input-warm"
+                />
+              </Labeled>
+            </div>
+          </Card>
+
+          <Card className="p-5 sm:p-6">
+            <div className="mb-4 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+              <Clock className="h-3 w-3" />
+              作息
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Labeled label="工作日睡">
+                <input
+                  type="time"
+                  value={minToClock(config.life.sleepMin)}
+                  onChange={(event) => patchLife({ sleepMin: clockToMin(event.target.value) })}
+                  className="input-warm"
+                />
+              </Labeled>
+              <Labeled label="工作日醒">
+                <input
+                  type="time"
+                  value={minToClock(config.life.wakeMin)}
+                  onChange={(event) => patchLife({ wakeMin: clockToMin(event.target.value) })}
+                  className="input-warm"
+                />
+              </Labeled>
+              <Labeled label="周末睡">
+                <input
+                  type="time"
+                  value={minToClock(config.life.weekendSleepMin)}
+                  onChange={(event) => patchLife({ weekendSleepMin: clockToMin(event.target.value) })}
+                  className="input-warm"
+                />
+              </Labeled>
+              <Labeled label="周末醒">
+                <input
+                  type="time"
+                  value={minToClock(config.life.weekendWakeMin)}
+                  onChange={(event) => patchLife({ weekendWakeMin: clockToMin(event.target.value) })}
+                  className="input-warm"
+                />
+              </Labeled>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Labeled label="睡着时被找">
+                <select
+                  value={config.life.whenAsleep}
+                  onChange={(event) => patchLife({ whenAsleep: event.target.value as AppConfig["life"]["whenAsleep"] })}
+                  className="input-warm"
+                >
+                  <option value="wake">叫醒自己</option>
+                  <option value="sleepy">迷糊地回</option>
+                  <option value="morning">留到早上</option>
+                </select>
+              </Labeled>
+              <div className="flex items-end pb-1">
+                <Toggle
+                  checked={config.life.diaryEnabled}
+                  onChange={(value) => patchLife({ diaryEnabled: value })}
+                  label="写日记"
+                  hint="睡前一页"
+                />
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        <Card className="p-5 sm:p-6">
+          <div className="mb-4 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+            <MessageCircleHeart className="h-3 w-3" />
+            主动与安静
+          </div>
+          <div className="space-y-4">
+            <Toggle
+              checked={config.speak.enabled}
+              onChange={(value) => patchSpeak({ enabled: value })}
+              label="允许她主动找你"
+              hint="不是每次都发，会看时间、心情和多久没聊。"
+            />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Labeled label="间隔" hint="分钟">
+                <input
+                  type="number"
+                  min={10}
+                  value={config.speak.intervalMin}
+                  onChange={(event) => patchSpeak({ intervalMin: Number(event.target.value) })}
+                  className="input-warm"
+                />
+              </Labeled>
+              <Labeled label="概率" hint="0–1">
+                <input
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={config.speak.chance}
+                  onChange={(event) => patchSpeak({ chance: Number(event.target.value) })}
+                  className="input-warm"
+                />
+              </Labeled>
+              <Labeled label="每日上限">
+                <input
+                  type="number"
+                  min={0}
+                  value={config.speak.maxPerDay}
+                  onChange={(event) => patchSpeak({ maxPerDay: Number(event.target.value) })}
+                  className="input-warm"
+                />
+              </Labeled>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Labeled label="安静开始">
+                <input
+                  type="time"
+                  value={minToClock(config.speak.quietStart)}
+                  onChange={(event) => patchSpeak({ quietStart: clockToMin(event.target.value) })}
+                  className="input-warm"
+                />
+              </Labeled>
+              <Labeled label="安静结束">
+                <input
+                  type="time"
+                  value={minToClock(config.speak.quietEnd)}
+                  onChange={(event) => patchSpeak({ quietEnd: clockToMin(event.target.value) })}
+                  className="input-warm"
+                />
+              </Labeled>
+              <Labeled label="最少沉默" hint="分钟">
+                <input
+                  type="number"
+                  min={0}
+                  value={config.speak.minSilenceMin}
+                  onChange={(event) => patchSpeak({ minSilenceMin: Number(event.target.value) })}
+                  className="input-warm"
+                />
+              </Labeled>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Labeled label="提醒你 每日上限">
+                <input
+                  type="number"
+                  min={0}
+                  value={config.speak.tellOwnerMaxPerDay}
+                  onChange={(event) => patchSpeak({ tellOwnerMaxPerDay: Number(event.target.value) })}
+                  className="input-warm"
+                />
+              </Labeled>
+              <div className="flex items-end pb-1">
+                <Toggle
+                  checked={config.mood.enabled}
+                  onChange={(value) => patchMood({ enabled: value })}
+                  label="心情"
+                  hint="会自己回稳"
+                />
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-5 sm:p-6">
+          <div className="mb-4 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+            <Wallet className="h-3 w-3" />
+            花销与峰谷
+          </div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-line/60 bg-white/35 px-3 py-2.5">
+              <div className="inline-flex items-center gap-2">
+                <Gauge className="h-3.5 w-3.5 text-gold" />
+                <div>
+                  <div className="text-[11px] text-ink">{payload.pricing.label}</div>
+                  <div className="text-[9.5px] text-ink-faint">
+                    下次切换 {formatTime(payload.pricing.nextChangeAt)} · {payload.pricing.peakWindow}
+                  </div>
+                </div>
+              </div>
+              <Badge tone={payload.pricing.isPeak ? "coral" : "sea"}>{payload.pricing.isPeak ? "高峰" : "空闲"}</Badge>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Labeled label="每日预算" hint="元，0 = 不限">
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={config.cost.dailyBudgetCny}
+                  onChange={(event) => patchCost({ dailyBudgetCny: Number(event.target.value) })}
+                  className="input-warm"
+                />
+              </Labeled>
+              <div className="flex items-end pb-1">
+                <Toggle
+                  checked={config.cost.peakPolicy}
+                  onChange={(value) => patchCost({ peakPolicy: value })}
+                  label="峰谷降载"
+                  hint="高峰少说、少想"
+                />
+              </div>
+            </div>
+            <PriceTable prices={payload.prices} />
+            <p className="text-[9.5px] leading-4 text-ink-faint">
+              高峰：工作日 09:00–12:00、14:00–18:00（法定节假日除外）。表中为「空闲/高峰」元每百万 token。
+            </p>
+          </div>
+        </Card>
+
+        <Card className="p-5 sm:p-6">
+          <div className="mb-4 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+            <Globe2 className="h-3 w-3" />
+            她上网
+          </div>
+          <div className="space-y-4">
+            <Toggle
+              checked={config.web.enabled}
+              onChange={(value) => patchWeb({ enabled: value })}
+              label="允许她出去看看"
+              hint="读 RSS、HN，偶尔记一笔；不会发帖。"
+            />
+            <Labeled label="订阅源" hint="一行一个 URL">
+              <textarea
+                value={config.web.rssFeeds.join("\n")}
+                onChange={(event) =>
+                  patchWeb({ rssFeeds: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean) })
+                }
+                rows={4}
+                className="input-warm resize-none font-mono text-[10.5px] leading-5"
+                spellCheck={false}
+              />
+            </Labeled>
+            <div className="border-t border-line/50 pt-4">
+              <div className="mb-2 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+                <Server className="h-3 w-3" />
+                服务
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Labeled label="端口" hint="改动后重启">
+                  <input
+                    type="number"
+                    min={1024}
+                    max={65535}
+                    value={config.ui.port}
+                    onChange={(event) => patchUi({ port: Number(event.target.value) })}
+                    className="input-warm"
+                  />
+                </Labeled>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <details className="paper-card mt-5 p-5">
+        <summary className="flex cursor-pointer list-none items-center justify-between text-[11.5px] text-ink-soft">
+          <span className="inline-flex items-center gap-1.5">
+            <Moon className="h-3.5 w-3.5" />
+            高级参数
+          </span>
+          <ChevronDown className="h-3.5 w-3.5" />
+        </summary>
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <Labeled label="历史条数" hint="空闲">
+            <input
+              type="number"
+              min={4}
+              max={100}
+              value={config.behavior.historyMessages}
+              onChange={(event) => patchBehavior({ historyMessages: Number(event.target.value) })}
+              className="input-warm"
+            />
+          </Labeled>
+          <Labeled label="历史条数" hint="高峰">
+            <input
+              type="number"
+              min={4}
+              max={100}
+              value={config.behavior.historyPeakMessages}
+              onChange={(event) => patchBehavior({ historyPeakMessages: Number(event.target.value) })}
+              className="input-warm"
+            />
+          </Labeled>
+          <Labeled label="输出上限" hint="空闲 token">
+            <input
+              type="number"
+              min={100}
+              max={4000}
+              value={config.behavior.maxOutputTokens}
+              onChange={(event) => patchBehavior({ maxOutputTokens: Number(event.target.value) })}
+              className="input-warm"
+            />
+          </Labeled>
+          <Labeled label="输出上限" hint="高峰 token">
+            <input
+              type="number"
+              min={80}
+              max={2000}
+              value={config.behavior.maxOutputTokensPeak}
+              onChange={(event) => patchBehavior({ maxOutputTokensPeak: Number(event.target.value) })}
+              className="input-warm"
+            />
+          </Labeled>
+          <Labeled label="工具步数" hint="空闲">
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={config.behavior.maxToolSteps}
+              onChange={(event) => patchBehavior({ maxToolSteps: Number(event.target.value) })}
+              className="input-warm"
+            />
+          </Labeled>
+          <Labeled label="工具步数" hint="高峰">
+            <input
+              type="number"
+              min={1}
+              max={6}
+              value={config.behavior.maxToolStepsPeak}
+              onChange={(event) => patchBehavior({ maxToolStepsPeak: Number(event.target.value) })}
+              className="input-warm"
+            />
+          </Labeled>
+          <Labeled label="连发防抖" hint="毫秒">
+            <input
+              type="number"
+              min={300}
+              max={8000}
+              value={config.behavior.burstMs}
+              onChange={(event) => patchBehavior({ burstMs: Number(event.target.value) })}
+              className="input-warm"
+            />
+          </Labeled>
+          <Labeled label="打字速度" hint="字/秒">
+            <input
+              type="number"
+              min={1}
+              max={30}
+              value={config.behavior.typingCps}
+              onChange={(event) => patchBehavior({ typingCps: Number(event.target.value) })}
+              className="input-warm"
+            />
+          </Labeled>
+          <Labeled label="最多气泡">
+            <input
+              type="number"
+              min={1}
+              max={8}
+              value={config.behavior.maxBubbles}
+              onChange={(event) => patchBehavior({ maxBubbles: Number(event.target.value) })}
+              className="input-warm"
+            />
+          </Labeled>
+        </div>
+      </details>
+
+      <div className="mt-6 flex items-center justify-between gap-3">
+        <p className="text-[9.5px] text-ink-faint">改完记得保存。模型和作息会在下一轮生效。</p>
+        <button type="button" onClick={() => void save()} disabled={saving || !dirty} className="btn-primary">
+          {saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+          保存设置
+        </button>
+      </div>
+    </div>
+  );
+}

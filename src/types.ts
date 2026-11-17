@@ -1,0 +1,216 @@
+export type SceneKind = "chat" | "own" | "diary";
+
+export type Role = "user" | "assistant" | "system" | "tool";
+
+export interface ToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
+export interface LLMMessage {
+  role: Role;
+  content: string;
+  name?: string;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
+  reasoning_content?: string;
+}
+
+export interface LLMUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  prompt_cache_hit_tokens?: number;
+  prompt_cache_miss_tokens?: number;
+}
+
+export interface LLMResult {
+  content: string;
+  toolCalls: ToolCall[];
+  usage: LLMUsage;
+  model: string;
+  finishReason: string;
+}
+
+export interface ModelConfig {
+  provider: "deepseek" | "openai-compatible";
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  sideModel: string;
+  temperature: number;
+  thinking: boolean;
+}
+
+export interface BehaviorConfig {
+  rotateHour: number;
+  historyMessages: number;
+  historyPeakMessages: number;
+  maxOutputTokens: number;
+  maxOutputTokensPeak: number;
+  maxToolSteps: number;
+  maxToolStepsPeak: number;
+  burstMs: number;
+  typingCps: number;
+  maxBubbles: number;
+  timezone: string;
+}
+
+export interface LifeConfig {
+  sleepMin: number;
+  wakeMin: number;
+  weekendSleepMin: number;
+  weekendWakeMin: number;
+  whenAsleep: "wake" | "sleepy" | "morning";
+  diaryEnabled: boolean;
+}
+
+export interface SpeakConfig {
+  enabled: boolean;
+  intervalMin: number;
+  chance: number;
+  minSilenceMin: number;
+  quietStart: number;
+  quietEnd: number;
+  maxPerDay: number;
+  tellOwnerMaxPerDay: number;
+}
+
+export interface MoodConfig {
+  enabled: boolean;
+  base: number;
+  halfLifeHours: number;
+}
+
+export interface CostConfig {
+  dailyBudgetCny: number;
+  peakPolicy: boolean;
+}
+
+export interface WebConfig {
+  enabled: boolean;
+  rssFeeds: string[];
+}
+
+export interface AppConfig {
+  name: string;
+  ownerTitle: string;
+  model: ModelConfig;
+  behavior: BehaviorConfig;
+  life: LifeConfig;
+  speak: SpeakConfig;
+  mood: MoodConfig;
+  cost: CostConfig;
+  web: WebConfig;
+  ui: { port: number };
+}
+
+export interface ChatMessage {
+  id: string;
+  ts: number;
+  role: "user" | "assistant";
+  kind: "text" | "sticker" | "image" | "monologue" | "silent" | "proactive";
+  text: string;
+  dayKey: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface TimelineEvent {
+  ts: number;
+  kind: string;
+  text: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface Reminder {
+  id: string;
+  text: string;
+  dueAt: number;
+  kind: "owner" | "care";
+  status: "pending" | "done" | "cancelled";
+  createdAt: number;
+  doneAt?: number;
+}
+
+export interface MoodState {
+  base: number;
+  dims: Record<string, number>;
+  updatedAt: number;
+  history: {
+    ts: number;
+    base: number;
+    dims: Record<string, number>;
+    reason: string;
+    source: string;
+  }[];
+}
+
+export interface Relationship {
+  firstMet: string;
+  daysKnown?: number;
+  trust: number;
+  intimacy: number;
+  streak: number;
+  milestones: { date: string; text: string }[];
+  updatedAt: number;
+}
+
+export interface RoomState {
+  name: string;
+  status: string;
+  detail: string;
+  updatedAt: number;
+}
+
+export interface LifeState {
+  lastTick: number;
+  wokenAt: number;
+  lastDiary: string;
+  lastConsolidate: string;
+  lastSpeakAt: number;
+  speakCountDay: string;
+  speakCount: number;
+  lastResumeGapAt: number;
+}
+
+export interface DeferredTask {
+  id: string;
+  kind: "diary" | "consolidate" | "own" | "mood";
+  runAfter: number;
+  payload?: Record<string, unknown>;
+  createdAt: number;
+}
+
+export interface UsageDay {
+  date: string;
+  calls: number;
+  promptTokens: number;
+  completionTokens: number;
+  cacheHitTokens: number;
+  cacheMissTokens: number;
+  costCny: number;
+  peakCalls: number;
+  offPeakCalls: number;
+  peakCostCny: number;
+  offPeakCostCny: number;
+}
+
+export interface Sticker {
+  name: string;
+  emoji?: string;
+  file?: string;
+  desc?: string;
+  scene?: string;
+  addedAt: number;
+}
+
+export interface ChatTurnResult {
+  bubbles: {
+    kind: "text" | "sticker" | "image" | "monologue" | "silent";
+    text: string;
+  }[];
+  silent: boolean;
+  raw: string;
+  toolCalls: { name: string; args: unknown }[];
+}

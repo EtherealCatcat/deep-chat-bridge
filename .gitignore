@@ -1,0 +1,13 @@
+.DS_Store
+node_modules/
+.npm-cache/
+dist/
+web/dist/
+data/
+coverage/
+*.log
+.env
+.env.*
+src-tauri/target/
+src-tauri/gen/
+data-test/

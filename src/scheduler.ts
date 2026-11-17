@@ -1,0 +1,265 @@
+import type { AppConfig, DeferredTask } from "./types.js";
+import type { Paths } from "./config.js";
+import type { MemoryStore } from "./memory.js";
+import type { ChatAgent } from "./agent.js";
+import type { ServerEvent } from "./events.js";
+import { addDeferred, loadDeferred, loadLife, saveDeferred, saveLife } from "./life.js";
+import { getRhythm, isQuietHours } from "./rhythm.js";
+import { costPolicy } from "./pricing.js";
+import { todayUsage } from "./usage.js";
+import { loadMood } from "./mood.js";
+import { loadRoom } from "./room.js";
+import { dueReminders, markReminderDone } from "./care.js";
+import { diaryTarget, writeDiary } from "./diary.js";
+import { consolidateMemory, hasInbox } from "./consolidate.js";
+import { lastAssistantMessageAt, lastOwnerMessageAt, todayProactiveCount } from "./chat.js";
+import { dayKey, formatClock, humanGap, zonedParts } from "./time.js";
+import { appendTimeline } from "./timeline.js";
+
+export interface SchedulerContext {
+  config: AppConfig;
+  paths: Paths;
+  memory: MemoryStore;
+  persona: string;
+  agent: ChatAgent;
+  emit: (event: ServerEvent) => void;
+  onChange: () => void;
+}
+
+export class Scheduler {
+  private timer: NodeJS.Timeout | null = null;
+  private ticking = false;
+
+  constructor(private ctx: SchedulerContext) {}
+
+  start(): void {
+    if (this.timer) return;
+    const life = loadLife(this.ctx.paths);
+    if (!life.lastTick) {
+      life.lastTick = Date.now();
+      saveLife(this.ctx.paths, life);
+    }
+    this.timer = setInterval(() => {
+      void this.tick();
+    }, 60_000);
+    setTimeout(() => {
+      void this.tick();
+    }, 1500);
+  }
+
+  stop(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  setContext(ctx: SchedulerContext): void {
+    this.ctx = ctx;
+  }
+
+  async tick(): Promise<void> {
+    if (this.ticking) return;
+    this.ticking = true;
+    try {
+      await this.runTick();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "调度器出了点问题。";
+      this.ctx.emit({ type: "error", message });
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  private async runTick(): Promise<void> {
+    const { config, paths, agent, emit, onChange } = this.ctx;
+    const now = Date.now();
+    let life = loadLife(paths);
+    const gap = life.lastTick ? now - life.lastTick : 0;
+
+    if (gap > 3 * 60_000 && life.lastTick > 0) {
+      appendTimeline(paths, config, { kind: "resume_gap", text: `电脑睡了 ${humanGap(gap)}`, meta: { gap } });
+      life.lastResumeGapAt = now;
+    }
+    life.lastTick = now;
+    saveLife(paths, life);
+
+    const rhythm = getRhythm(config, life, now);
+    const policy = costPolicy(config, todayUsage(paths, config), now);
+
+    await this.processDeferred(now, policy, rhythm);
+
+    life = loadLife(paths);
+    const diaryDay = config.life.diaryEnabled ? diaryTarget(config, life.lastDiary, now) : null;
+    if (diaryDay && !agent.busy) {
+      if (policy.allowDiary) {
+        const ok = await writeDiary(diaryDay, {
+          config,
+          paths,
+          memory: this.ctx.memory,
+          persona: this.ctx.persona,
+          emit,
+          onChange,
+        });
+        if (!ok) {
+          // No activity, or a transient failure: diaryTarget will retry later.
+        }
+      } else {
+        addDeferred(paths, { kind: "diary", runAfter: policy.nextChangeAt, payload: { day: diaryDay } });
+      }
+    }
+
+    life = loadLife(paths);
+    if (
+      life.lastDiary &&
+      life.lastConsolidate !== life.lastDiary &&
+      hasInbox(paths) &&
+      !agent.busy
+    ) {
+      if (policy.allowConsolidation) {
+        await consolidateMemory(life.lastDiary, {
+          config,
+          paths,
+          memory: this.ctx.memory,
+          emit,
+          onChange,
+        });
+      } else {
+        addDeferred(paths, { kind: "consolidate", runAfter: policy.nextChangeAt, payload: { day: life.lastDiary } });
+      }
+    }
+
+    await this.fireReminders(now, rhythm);
+
+    if (policy.allowProactive && !agent.busy) {
+      await this.maybeSpeak(now, rhythm);
+    }
+
+    onChange();
+  }
+
+  private async processDeferred(
+    now: number,
+    policy: ReturnType<typeof costPolicy>,
+    rhythm: ReturnType<typeof getRhythm>,
+  ): Promise<void> {
+    const { paths, config, agent } = this.ctx;
+    const tasks = loadDeferred(paths);
+    if (!tasks.length) return;
+    const remaining: DeferredTask[] = [];
+    for (const task of tasks) {
+      if (task.runAfter > now) {
+        remaining.push(task);
+        continue;
+      }
+      if (task.kind === "diary") {
+        if (!config.life.diaryEnabled) continue;
+        if (!policy.allowDiary || agent.busy) {
+          remaining.push(task);
+          continue;
+        }
+        const day = String(task.payload?.day ?? "");
+        if (day) {
+          await writeDiary(day, {
+            config,
+            paths,
+            memory: this.ctx.memory,
+            persona: this.ctx.persona,
+            emit: this.ctx.emit,
+            onChange: this.ctx.onChange,
+          });
+        }
+      } else if (task.kind === "consolidate") {
+        if (!policy.allowConsolidation || agent.busy) {
+          remaining.push(task);
+          continue;
+        }
+        const day = String(task.payload?.day ?? "");
+        if (day) {
+          await consolidateMemory(day, {
+            config,
+            paths,
+            memory: this.ctx.memory,
+            emit: this.ctx.emit,
+            onChange: this.ctx.onChange,
+          });
+        }
+      }
+      // own / mood jobs are not implemented in P0–P3; drop them silently.
+    }
+    saveDeferred(paths, remaining);
+  }
+
+  private async fireReminders(now: number, rhythm: ReturnType<typeof getRhythm>): Promise<void> {
+    const { config, paths, agent } = this.ctx;
+    const due = dueReminders(paths, config, rhythm, now);
+    for (const reminder of due) {
+      if (agent.busy) break;
+      await agent.say(reminder.text, true);
+      markReminderDone(paths, reminder.id);
+      appendTimeline(paths, config, {
+        kind: "remind",
+        text: `提醒${config.ownerTitle}：${reminder.text}`,
+        meta: { id: reminder.id, kind: reminder.kind },
+      });
+      this.ctx.emit({
+        type: "timeline",
+        event: { ts: Date.now(), kind: "remind", text: reminder.text },
+      });
+    }
+  }
+
+  private async maybeSpeak(now: number, rhythm: ReturnType<typeof getRhythm>): Promise<void> {
+    const { config, paths, agent } = this.ctx;
+    if (!config.speak.enabled) return;
+    if (rhythm.phase === "asleep") return;
+    if (isQuietHours(config, now)) return;
+
+    const lastOwner = lastOwnerMessageAt(paths, config);
+    if (!lastOwner) return;
+    const silenceMs = now - lastOwner;
+    if (silenceMs < config.speak.minSilenceMin * 60_000) return;
+
+    const life = loadLife(paths);
+    const today = dayKey(now, config.behavior.rotateHour, config.behavior.timezone);
+    if (life.speakCountDay !== today) {
+      life.speakCountDay = today;
+      life.speakCount = 0;
+    }
+    if (life.speakCount >= config.speak.maxPerDay) return;
+
+    const lastSpeak = Math.max(life.lastSpeakAt, lastAssistantMessageAt(paths, config));
+    if (lastSpeak && now - lastSpeak < config.speak.intervalMin * 60_000) return;
+    if (todayProactiveCount(paths, config) >= config.speak.maxPerDay) return;
+
+    const mood = loadMood(paths, config);
+    let chance = config.speak.chance;
+    const hours = silenceMs / 3_600_000;
+    if (hours > 8) chance *= 2.2;
+    else if (hours > 4) chance *= 1.6;
+    else if (hours > 2) chance *= 1.2;
+    chance += (mood.dims.miss ?? 0) / 200 + (mood.dims.bored ?? 0) / 300;
+    if (rhythm.phase === "sleepy") chance *= 0.5;
+    const hour = zonedParts(now, config.behavior.timezone).hour;
+    if ((hour >= 11 && hour < 13) || (hour >= 17 && hour < 19)) chance += 0.25;
+    chance = Math.min(0.9, chance);
+
+    if (Math.random() > chance) {
+      life.lastSpeakAt = now;
+      saveLife(paths, life);
+      return;
+    }
+
+    const room = loadRoom(paths);
+    const nudge = [
+      `现在是 ${formatClock(now, config.behavior.timezone)}。${config.ownerTitle}已经 ${humanGap(silenceMs)} 没和你说话了。`,
+      `你醒着，手头在${room.status}。你想主动和他说句话。`,
+      "可以分享你刚想到的、看到的，或者只是问一句；不要问「在吗」，不要解释你在主动，也不要提系统。",
+      "如果不想说，写（不回）。",
+    ].join("\n");
+
+    const sent = await agent.proactive(nudge);
+    life.lastSpeakAt = now;
+    life.speakCountDay = today;
+    if (sent) life.speakCount += 1;
+    saveLife(paths, life);
+  }
+}

@@ -97,6 +97,8 @@ export interface Status {
   name: string;
   ownerTitle: string;
   busy: boolean;
+  burst: boolean;
+  burstCount: number;
   unread: number;
   serverTime: number;
   mood: MoodState;

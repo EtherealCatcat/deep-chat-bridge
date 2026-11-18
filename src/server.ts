@@ -66,7 +66,14 @@ function broadcast(event: ServerEvent): void {
 }
 
 function currentStatus() {
-  return buildStatus({ config, paths: p, busy: agent.busy, unread });
+  return buildStatus({
+    config,
+    paths: p,
+    busy: agent.busy,
+    burst: agent.isHolding(),
+    burstCount: agent.pendingCount,
+    unread,
+  });
 }
 
 function onChange(): void {
@@ -213,6 +220,15 @@ app.post("/api/reaction", async (request) => {
 app.post("/api/stop", async () => {
   agent.stop();
   return { ok: true };
+});
+
+app.get("/api/burst", async () => ({ active: agent.isHolding(), count: agent.pendingCount }));
+
+app.post("/api/burst", async (request) => {
+  const body = requireObject(request.body);
+  const active = Boolean(body.active);
+  agent.setHold(active);
+  return { ok: true, active, count: agent.pendingCount };
 });
 
 app.post("/api/new", async () => {

@@ -1,4 +1,4 @@
-import type { AppConfig, ChatTurnResult } from "./types.js";
+import type { AppConfig, ChatMessage, ChatTurnResult, QuoteRef } from "./types.js";
 
 export interface GuardResult {
   violation: boolean;
@@ -93,43 +93,93 @@ function splitLong(text: string, max: number): string[] {
   return chunks.filter(Boolean);
 }
 
-export function parseReply(raw: string, config: AppConfig): ChatTurnResult {
+function normalizeQuote(text: string): string {
+  return text
+    .replace(/\s+/g, "")
+    .replace(/[“”"「」『』]/g, "")
+    .replace(/^\.{0,3}|\.{0,3}$/g, "")
+    .trim();
+}
+
+function resolveQuote(text: string, candidates: ChatMessage[]): QuoteRef | undefined {
+  const want = normalizeQuote(text).slice(0, 160);
+  if (want.length < 2) return undefined;
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    const message = candidates[i];
+    if (message.kind === "silent") continue;
+    const body =
+      message.kind === "sticker"
+        ? `[表情]${message.text}`
+        : message.kind === "image"
+          ? "[图片]"
+          : message.text;
+    const have = normalizeQuote(body).slice(0, 160);
+    if (!have) continue;
+    if (have === want || have.includes(want) || want.includes(have.slice(0, 40))) {
+      return {
+        id: message.id,
+        role: message.role,
+        kind: message.kind,
+        text: message.text.slice(0, 240),
+        ts: message.ts,
+      };
+    }
+  }
+  return undefined;
+}
+
+export function parseReply(raw: string, config: AppConfig, quoteCandidates: ChatMessage[] = []): ChatTurnResult {
   const text = cleanReply(raw);
   const bubbles: ChatTurnResult["bubbles"] = [];
   let silent = false;
+  let pendingQuote: QuoteRef | undefined;
   const lines = text.split(/\n+/);
+
+  const push = (bubble: ChatTurnResult["bubbles"][number]) => {
+    if (pendingQuote) {
+      bubble.quote = pendingQuote;
+      pendingQuote = undefined;
+    }
+    bubbles.push(bubble);
+  };
 
   for (const rawLine of lines) {
     let line = rawLine.trim();
     if (!line) continue;
+    const quoteMark = /^\[引用\]\s*(.+)$/.exec(line);
+    if (quoteMark) {
+      pendingQuote = resolveQuote(quoteMark[1], quoteCandidates);
+      continue;
+    }
     if (/^（?\(?不回\)?）?$/.test(line)) {
       silent = true;
+      pendingQuote = undefined;
       continue;
     }
 
     const sticker = /^\[表情[:：]\s*(.+?)\]$/.exec(line);
     if (sticker) {
-      bubbles.push({ kind: "sticker", text: sticker[1].trim() });
+      push({ kind: "sticker", text: sticker[1].trim() });
       continue;
     }
 
     const mono = /^（?(?:独白|心里想|心里|想)[:：]\s*([\s\S]+?)\)?）?$/.exec(line);
     if (mono) {
-      bubbles.push({ kind: "monologue", text: stripOuterQuotes(mono[1].trim()) });
+      push({ kind: "monologue", text: stripOuterQuotes(mono[1].trim()) });
       continue;
     }
 
     line = line.replace(/^\[表情[:：]\s*(.+?)\]/, "[表情:$1]");
     const inlineSticker = /\[表情[:：]\s*(.+?)\]/.exec(line);
     if (inlineSticker && line.replace(inlineSticker[0], "").trim() === "") {
-      bubbles.push({ kind: "sticker", text: inlineSticker[1].trim() });
+      push({ kind: "sticker", text: inlineSticker[1].trim() });
       continue;
     }
 
     line = stripOuterQuotes(line);
     if (!line) continue;
     for (const chunk of splitLong(line, 120)) {
-      bubbles.push({ kind: "text", text: chunk });
+      push({ kind: "text", text: chunk });
     }
   }
 

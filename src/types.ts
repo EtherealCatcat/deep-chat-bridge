@@ -239,6 +239,7 @@ export interface ChatTurnResult {
   bubbles: {
     kind: "text" | "sticker" | "image" | "monologue" | "silent";
     text: string;
+    quote?: QuoteRef;
   }[];
   silent: boolean;
   raw: string;

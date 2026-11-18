@@ -151,6 +151,17 @@ export default function App() {
     }
   }
 
+  async function toggleBurst(active: boolean) {
+    try {
+      const result = await api.setBurst(active);
+      setStatus((prev) => (prev ? { ...prev, burst: result.active, burstCount: result.count } : prev));
+      showToast(active ? "连发模式已开：她先不打断你，发完再一起看。" : "已经发给她了，等她慢慢回。");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "连发模式切换失败。", "error");
+      throw error;
+    }
+  }
+
   function navigate(next: Page) {
     setPage(next);
     if (next === "chat") void markRead();
@@ -168,6 +179,7 @@ export default function App() {
             typing={typing}
             readAt={readAt}
             onSend={send}
+            onBurst={toggleBurst}
             onNavigateSettings={() => navigate("settings")}
           />
         ) : page === "today" ? (

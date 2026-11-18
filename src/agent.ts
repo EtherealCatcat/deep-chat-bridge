@@ -42,6 +42,7 @@ export class ChatAgent {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private ownMode = false;
+  private holding = false;
   private abort: AbortController | null = null;
   private turnSeq = 0;
   private sentInTurn = false;
@@ -58,6 +59,31 @@ export class ChatAgent {
     return this.running;
   }
 
+  get pendingCount(): number {
+    return this.pending.length;
+  }
+
+  isHolding(): boolean {
+    return this.holding;
+  }
+
+  /**
+   * 连发模式：消息只落盘并攒在 pending 里，不唤醒她；关掉时才把整批交给她。
+   */
+  setHold(active: boolean): boolean {
+    this.holding = Boolean(active);
+    if (this.holding) {
+      if (this.timer) {
+        clearTimeout(this.timer);
+        this.timer = null;
+      }
+    } else if (this.pending.length && !this.running) {
+      this.arm(300);
+    }
+    this.onChange();
+    return this.holding;
+  }
+
   setContext(ctx: AgentContext): void {
     this.ctx = ctx;
   }
@@ -66,6 +92,10 @@ export class ChatAgent {
     const clean = text.trim();
     if (!clean && !image) return;
     this.pending.push({ text: clean || "（发来一张图片）", ts, quote, image });
+    if (this.holding) {
+      this.onChange();
+      return;
+    }
     if (this.running && this.ownMode) {
       this.abort?.abort();
       return;
@@ -78,12 +108,15 @@ export class ChatAgent {
   }
 
   newSession(): void {
+    this.holding = false;
+    this.pending = [];
     this.historyFrom = Date.now();
     this.emit({ type: "read", at: Date.now() });
     this.onChange();
   }
 
   stop(): void {
+    this.holding = false;
     this.pending = [];
     this.ownMode = false;
     if (this.timer) {
@@ -99,6 +132,7 @@ export class ChatAgent {
   }
 
   private arm(delay = this.ctx.config.behavior.burstMs): void {
+    if (this.holding) return;
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = null;
@@ -107,7 +141,7 @@ export class ChatAgent {
   }
 
   private async flush(): Promise<void> {
-    if (this.running || !this.pending.length) return;
+    if (this.holding || this.running || !this.pending.length) return;
     const batch = this.pending.splice(0);
     const firstTs = batch[0]?.ts ?? Date.now();
     const text = batch.map((item) => item.text).join("\n");
@@ -118,7 +152,7 @@ export class ChatAgent {
   }
 
   async proactive(nudge: string): Promise<boolean> {
-    if (this.running || this.pending.length) return false;
+    if (this.holding || this.running || this.pending.length) return false;
     this.sentInTurn = false;
     await this.runTurn(nudge, Date.now(), true);
     return this.sentInTurn;
@@ -244,7 +278,8 @@ export class ChatAgent {
         raw = await this.retryStyle(raw, messages, policy.maxOutputTokens);
       }
 
-      const parsed = parseReply(raw, config);
+      const quoteCandidates = messagesBefore(paths, config, now + 1, 30).filter((m) => m.ts >= this.historyFrom);
+      const parsed = parseReply(raw, config, quoteCandidates);
       this.debug = {
         at: now,
         turnId,
@@ -311,11 +346,13 @@ export class ChatAgent {
       this.emit({ type: "done", turnId });
       this.emit({ type: "busy", busy: false });
       this.onChange();
+      if (!this.holding && this.pending.length) this.arm(300);
     }
   }
 
   async runOwnTime(now: number, windowEnd: number): Promise<{ ok: boolean; summary: string; shares: string[]; error?: string }> {
     const { config, paths, memory } = this.ctx;
+    if (this.holding) return { ok: false, summary: "", shares: [], error: "连发中，先等她收完。" };
     if (this.running) return { ok: false, summary: "", shares: [], error: "正忙着。" };
 
     this.running = true;
@@ -486,16 +523,16 @@ ${body}` },
   }
 
   private async deliver(
-    bubbles: { kind: "text" | "sticker" | "image" | "monologue" | "silent"; text: string }[],
+    bubbles: { kind: "text" | "sticker" | "image" | "monologue" | "silent"; text: string; quote?: QuoteRef }[],
     proactive: boolean,
   ): Promise<void> {
     for (let i = 0; i < bubbles.length; i++) {
       const bubble = bubbles[i];
       if (bubble.kind === "silent") continue;
       if (bubble.kind === "sticker") {
-        await this.deliverSticker(bubble.text, proactive);
+        await this.deliverSticker(bubble.text, proactive, bubble.quote);
       } else if (bubble.kind === "image") {
-        await this.deliverImage(bubble.text, proactive);
+        await this.deliverImage(bubble.text, proactive, bubble.quote);
       } else if (bubble.kind === "monologue") {
         await this.emitTyping(false);
         const msg = appendChatMessage(this.ctx.paths, this.ctx.config, {
@@ -503,6 +540,7 @@ ${body}` },
           kind: "monologue",
           text: bubble.text,
           meta: { proactive },
+          quote: bubble.quote,
         });
         this.emit({ type: "message", message: msg });
       } else {
@@ -514,6 +552,7 @@ ${body}` },
           kind: "text",
           text: bubble.text,
           meta: proactive ? { proactive: true } : undefined,
+          quote: bubble.quote,
         });
         this.emit({ type: "message", message: msg });
       }
@@ -521,7 +560,7 @@ ${body}` },
     }
   }
 
-  private async deliverSticker(name: string, proactive: boolean): Promise<void> {
+  private async deliverSticker(name: string, proactive: boolean, quote?: QuoteRef): Promise<void> {
     const { config, paths } = this.ctx;
     const sticker = findSticker(paths, name);
     const msg = appendChatMessage(paths, config, {
@@ -529,18 +568,20 @@ ${body}` },
       kind: "sticker",
       text: sticker?.name ?? name,
       meta: { ...(sticker?.emoji ? { emoji: sticker.emoji } : {}), ...(sticker?.file ? { file: sticker.file } : {}), proactive },
+      quote,
     });
     await this.emitTyping(false, 250);
     this.emit({ type: "message", message: msg });
   }
 
-  private async deliverImage(file: string, proactive: boolean): Promise<void> {
+  private async deliverImage(file: string, proactive: boolean, quote?: QuoteRef): Promise<void> {
     const { config, paths } = this.ctx;
     const msg = appendChatMessage(paths, config, {
       role: "assistant",
       kind: "image",
       text: "",
       meta: { file, proactive },
+      quote,
     });
     this.emit({ type: "message", message: msg });
   }

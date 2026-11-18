@@ -50,6 +50,12 @@ export const api = {
     }),
   read: () => request<{ ok: boolean }>("/api/read", { method: "POST" }),
   stop: () => request<{ ok: boolean }>("/api/stop", { method: "POST" }),
+  burst: () => request<{ active: boolean; count: number }>("/api/burst"),
+  setBurst: (active: boolean) =>
+    request<{ ok: boolean; active: boolean; count: number }>("/api/burst", {
+      method: "POST",
+      body: JSON.stringify({ active }),
+    }),
   newSession: () => request<{ ok: boolean }>("/api/new", { method: "POST" }),
   memory: () => request<MemorySnapshot>("/api/memory"),
   saveMemory: (name: string, content: string) =>

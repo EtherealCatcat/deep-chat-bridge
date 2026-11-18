@@ -135,7 +135,7 @@ export class Scheduler {
       }
     }
 
-    await this.fireReminders(now, rhythm);
+    if (!agent.isHolding()) await this.fireReminders(now, rhythm);
 
     if (config.web.ownTimeEnabled && !agent.busy) {
       await this.maybeOwnTime(now, rhythm, policy);
@@ -206,6 +206,7 @@ export class Scheduler {
     policy: ReturnType<typeof costPolicy>,
   ): Promise<void> {
     const { config, paths, agent } = this.ctx;
+    if (agent.isHolding()) return;
     if (!config.web.ownTimeEnabled) return;
     if (rhythm.phase !== "awake" || isQuietHours(config, now)) return;
 
@@ -271,6 +272,7 @@ export class Scheduler {
 
   private async maybeSpeak(now: number, rhythm: ReturnType<typeof getRhythm>): Promise<void> {
     const { config, paths, agent } = this.ctx;
+    if (agent.isHolding()) return;
     if (!config.speak.enabled) return;
     if (rhythm.phase === "asleep") return;
     if (isQuietHours(config, now)) return;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG } from "../src/config.js";
 import { cleanReply, parseReply, styleGuard, typingMs } from "../src/reply.js";
+import type { ChatMessage } from "../src/types.js";
 
 const config = structuredClone(DEFAULT_CONFIG);
 
@@ -26,6 +27,35 @@ describe("reply parsing", () => {
   it("flags assistant-style replies", () => {
     expect(styleGuard("作为一个AI助手，我建议你可以试试。").violation).toBe(true);
     expect(styleGuard("今天风好大，你那边呢？").violation).toBe(false);
+  });
+
+  it("attaches a model quote to the next bubble", () => {
+    const original: ChatMessage = {
+      id: "u1",
+      ts: new Date("2026-11-18T10:00:00+08:00").getTime(),
+      role: "user",
+      kind: "text",
+      text: "今天有点累",
+      dayKey: "2026-11-18",
+    };
+    const result = parseReply("[引用] 今天有点累\n那先歇一会儿。", config, [original]);
+    expect(result.bubbles).toHaveLength(1);
+    expect(result.bubbles[0].text).toBe("那先歇一会儿。");
+    expect(result.bubbles[0].quote?.id).toBe("u1");
+  });
+
+  it("drops an unmatched model quote without breaking the reply", () => {
+    const original: ChatMessage = {
+      id: "u1",
+      ts: Date.now(),
+      role: "user",
+      kind: "text",
+      text: "今天有点累",
+      dayKey: "2026-11-18",
+    };
+    const result = parseReply("[引用] 完全没说过的话\n嗯。", config, [original]);
+    expect(result.bubbles[0].text).toBe("嗯。");
+    expect(result.bubbles[0].quote).toBeUndefined();
   });
 
   it("keeps typing time in the human range", () => {

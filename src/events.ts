@@ -6,6 +6,8 @@ export interface StatusSnapshot {
   name: string;
   ownerTitle: string;
   busy: boolean;
+  burst: boolean;
+  burstCount: number;
   unread: number;
   serverTime: number;
   mood: MoodState;

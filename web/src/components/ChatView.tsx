@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { CheckCheck, Feather, ImagePlus, LoaderCircle, Quote, Send, Sparkles, X } from "lucide-react";
+import { CheckCheck, Feather, ImagePlus, ListPlus, LoaderCircle, Quote, Send, Sparkles, X } from "lucide-react";
 import type { ChatMessage, QuoteRef, Status } from "../types";
 import { API_BASE, formatDay, formatTime } from "../api";
 import { prepareImage, type PreparedImage } from "../image";
@@ -251,6 +251,7 @@ export function ChatView({
   typing,
   readAt,
   onSend,
+  onBurst,
   onNavigateSettings,
 }: {
   status: Status | null;
@@ -258,6 +259,7 @@ export function ChatView({
   typing: boolean;
   readAt: number | null;
   onSend: (text: string, quote?: ChatMessage, image?: string) => Promise<void>;
+  onBurst: (active: boolean) => Promise<void>;
   onNavigateSettings: () => void;
 }) {
   const [text, setText] = useState("");
@@ -337,6 +339,14 @@ export function ChatView({
   }
 
   const asleep = status?.rhythm.phase === "asleep";
+  const burst = Boolean(status?.burst);
+  const burstCount = status?.burstCount ?? 0;
+
+  async function finishBurst() {
+    if (sending || preparing) return;
+    if (text.trim() || image) await submit();
+    await onBurst(false);
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -435,6 +445,23 @@ export function ChatView({
 
       <div className="border-t border-line/55 bg-[rgba(247,240,230,0.55)] px-4 pb-4 pt-3 backdrop-blur-md sm:px-7">
         <div className="mx-auto w-full max-w-[780px]">
+          {burst ? (
+            <div className="mb-2 flex items-center gap-2 rounded-xl border border-sea/25 bg-sea/[0.06] px-3 py-2">
+              <ListPlus className="h-3.5 w-3.5 shrink-0 text-sea-deep" />
+              <div className="min-w-0 flex-1 text-[10.5px] text-ink-soft">
+                <span className="font-medium text-sea-deep">连发中</span>
+                <span className="text-ink-faint"> · 已经攒了 {burstCount} 条，她还没收到</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => void finishBurst()}
+                disabled={sending || preparing}
+                className="shrink-0 rounded-full bg-sea px-3 py-1 text-[10.5px] font-medium text-white transition hover:bg-sea-deep disabled:opacity-50"
+              >
+                发完了
+              </button>
+            </div>
+          ) : null}
           {image ? (
             <div className="mb-2 flex items-center gap-2.5 rounded-xl border border-line/70 bg-white/50 p-2">
               <img src={image.dataUrl} alt="" className="h-12 w-12 rounded-lg object-cover" />
@@ -490,11 +517,23 @@ export function ChatView({
             />
             <button
               type="button"
+              onClick={() => void onBurst(!burst)}
+              className={`mb-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full transition ${
+                burst ? "bg-sea/15 text-sea-deep" : "text-ink-faint hover:bg-white/70 hover:text-coral"
+              }`}
+              title={burst ? "结束连发，让她看整段" : "连发模式：先攒着，不打断她"}
+              aria-label={burst ? "结束连发" : "连发模式"}
+              aria-pressed={burst}
+            >
+              <ListPlus className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
               onClick={() => fileRef.current?.click()}
-              disabled={preparing || sending}
+              disabled={preparing || sending || burst}
               className="mb-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-faint transition hover:bg-white/70 hover:text-coral disabled:opacity-40"
-              title="发一张图片"
-              aria-label="发一张图片"
+              title={burst ? "连发时先只发文字，图片请单独发" : "发一张图片"}
+              aria-label={burst ? "连发时暂不支持图片" : "发一张图片"}
             >
               {preparing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
             </button>
@@ -518,7 +557,7 @@ export function ChatView({
                   void submit();
                 }
               }}
-              placeholder={asleep ? "她睡着了，留言会等到早上…" : "和鲸鲸说点什么…"}
+              placeholder={burst ? "继续发…她还没收到" : asleep ? "她睡着了，留言会等到早上…" : "和鲸鲸说点什么…"}
               className="max-h-[150px] min-h-[38px] flex-1 resize-none bg-transparent py-2 text-[14.5px] leading-6 text-ink outline-none placeholder:text-ink-faint/80"
             />
             <button
@@ -532,7 +571,7 @@ export function ChatView({
             </button>
           </div>
           <div className="mt-2 flex items-center justify-between px-1 text-[9.5px] text-ink-faint">
-            <span>Enter 发送 · Shift + Enter 换行</span>
+            <span>{burst ? `连发中 · ${burstCount} 条还没发出去 · 点「发完了」再交给她` : "Enter 发送 · Shift + Enter 换行"}</span>
             <span className="inline-flex items-center gap-1">
               <Feather className="h-2.5 w-2.5" />
               她可能已读不回，也可能突然找你

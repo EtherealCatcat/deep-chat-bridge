@@ -15,9 +15,11 @@ export function buildStatus(input: {
   config: AppConfig;
   paths: Paths;
   busy: boolean;
+  burst: boolean;
+  burstCount: number;
   unread: number;
 }): StatusSnapshot {
-  const { config, paths, busy, unread } = input;
+  const { config, paths, busy, burst, burstCount, unread } = input;
   const now = Date.now();
   const life = loadLife(paths);
   const rhythm = getRhythm(config, life, now);
@@ -30,6 +32,8 @@ export function buildStatus(input: {
     name: config.name,
     ownerTitle: config.ownerTitle,
     busy,
+    burst,
+    burstCount,
     unread,
     serverTime: now,
     mood,

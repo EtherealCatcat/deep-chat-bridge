@@ -161,6 +161,10 @@ npm run dev           # 服务端 + Web 热更新
 npm run tauri:dev     # Tauri 原生窗口
 ```
 
+## 更新记录
+
+见 [CHANGELOG.md](CHANGELOG.md)。
+
 ## 现在还没有的
 
 - P5：Tauri 打包/签名、launchd 开机自启、把服务端做成 sidecar。

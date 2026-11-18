@@ -2,7 +2,7 @@
 
 本文件记录 chatBridge 的重要改动。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
-当前主线为 `main`，基线提交 `baecf0d`（2026-11-18）。后续并行功能分支请从该提交拉出，合并时把条目补到 `[Unreleased]`。
+当前主线为 `main`（2026-11-18）。后续并行功能分支请从最新 `main` 拉出，合并时把条目补到 `[Unreleased]`。
 
 ## [Unreleased]
 

@@ -139,11 +139,11 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [page, messages.length, markRead]);
 
-  async function send(text: string) {
+  async function send(text: string, quote?: ChatMessage) {
     const trimmed = text.trim();
     if (!trimmed) return;
     try {
-      const result = await api.send(trimmed);
+      const result = await api.send(trimmed, quote?.id);
       addMessage(result.message);
     } catch (error) {
       showToast(error instanceof Error ? error.message : "没发出去。", "error");

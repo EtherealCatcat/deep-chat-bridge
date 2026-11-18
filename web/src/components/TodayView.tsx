@@ -6,11 +6,13 @@ import {
   Check,
   Clock3,
   Coffee,
+  Compass,
   LoaderCircle,
   MessageCircle,
   Moon,
   Plus,
   RefreshCw,
+  Share2,
   Sparkles,
   Sun,
   Sunrise,
@@ -32,7 +34,34 @@ const eventMeta: Record<string, { icon: typeof Sun; tone: string }> = {
   sleep: { icon: Moon, tone: "text-ink-faint" },
   wake: { icon: Sunrise, tone: "text-gold" },
   web: { icon: Coffee, tone: "text-sea" },
+  own: { icon: Compass, tone: "text-sea" },
+  share: { icon: Share2, tone: "text-coral" },
 };
+
+function OwnCard({ status }: { status: Status }) {
+  const own = status.own;
+  return (
+    <Card className="p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-[10px] uppercase tracking-[0.18em] text-ink-faint">她自己的时间</div>
+        <span className={`text-[10px] ${own.active ? "text-sea" : "text-ink-faint"}`}>
+          {own.enabled ? (own.active ? "正在过" : "开着") : "关着"}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className={`h-2 w-2 rounded-full ${own.active ? "animate-pulse bg-sea" : "bg-line"}`} />
+        <span className="text-[12.5px] text-ink">{own.active ? "她正在做自己的事" : own.label}</span>
+      </div>
+      {own.lastResult ? (
+        <p className="mt-2 line-clamp-3 text-[10.5px] leading-5 text-ink-soft">{own.lastResult}</p>
+      ) : (
+        <p className="mt-2 text-[10.5px] leading-5 text-ink-faint">
+          还没留下记录。到时间她会去读点东西、翻翻笔记，或者只是坐着。
+        </p>
+      )}
+    </Card>
+  );
+}
 
 function EventRow({ event }: { event: TimelineEvent }) {
   const meta = eventMeta[event.kind] ?? { icon: Sun, tone: "text-ink-faint" };
@@ -254,6 +283,8 @@ export function TodayView({ status, showToast }: { status: Status | null; showTo
 
         <div className="space-y-4">
           <MoodCard status={status ?? emptyMoodStatus} />
+
+          {status ? <OwnCard status={status} /> : null}
 
           <Card className="p-5">
             <div className="mb-1 flex items-center justify-between">

@@ -544,6 +544,12 @@ export function SettingsView({ showToast }: { showToast: (text: string, kind?: "
               label="允许她出去看看"
               hint="读 RSS、HN，偶尔记一笔；不会发帖。"
             />
+            <Toggle
+              checked={config.web.ownTimeEnabled}
+              onChange={(value) => patchWeb({ ownTimeEnabled: value })}
+              label="让她有自己的时间"
+              hint="在随机窗口里读点东西、翻笔记；偶尔忍不住来找你。"
+            />
             <Labeled label="订阅源" hint="一行一个 URL">
               <textarea
                 value={config.web.rssFeeds.join("\n")}

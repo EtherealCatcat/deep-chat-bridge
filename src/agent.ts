@@ -1,4 +1,4 @@
-import type { AppConfig, ChatMessage, LLMMessage, SceneKind } from "./types.js";
+import type { AppConfig, ChatMessage, LLMMessage, OwnTimeState, QuoteRef, SceneKind } from "./types.js";
 import type { Paths } from "./config.js";
 import type { MemoryStore } from "./memory.js";
 import type { ServerEvent } from "./events.js";
@@ -10,13 +10,14 @@ import { loadRoom } from "./room.js";
 import { loadRelationship, saveRelationship, updateStreak } from "./relationship.js";
 import { loadReminders, pendingReminders } from "./care.js";
 import { listStickers, ensureStickers, findSticker } from "./stickers.js";
-import { appendChatMessage, messagesBefore, toLLMHistory, yesterdayDigest, todayMessageCount, todayProactiveCount, lastOwnerMessageAt, ensureSession } from "./chat.js";
+import { appendChatMessage, messagesBefore, quoteLine, toLLMHistory, yesterdayDigest, todayMessageCount, todayProactiveCount, lastOwnerMessageAt, ensureSession } from "./chat.js";
 import { dayKey, formatClock } from "./time.js";
 import { timelineSummary, appendTimeline } from "./timeline.js";
 import { costPolicy, isPeak } from "./pricing.js";
 import { todayUsage, recordUsage } from "./usage.js";
 import { callLLM } from "./llm.js";
-import { parseReply, styleGuard, typingMs, gapMs } from "./reply.js";
+import { appendOwnLog } from "./web.js";
+import { cleanReply, parseReply, styleGuard, typingMs, gapMs } from "./reply.js";
 import { runToolLoop } from "./agentLoop.js";
 import type { ToolContext, OutboxItem } from "./tools.js";
 
@@ -30,9 +31,10 @@ export interface AgentContext {
 }
 
 export class ChatAgent {
-  private pending: { text: string; ts: number }[] = [];
+  private pending: { text: string; ts: number; quote?: QuoteRef }[] = [];
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private ownMode = false;
   private abort: AbortController | null = null;
   private turnSeq = 0;
   private sentInTurn = false;
@@ -53,10 +55,14 @@ export class ChatAgent {
     this.ctx = ctx;
   }
 
-  enqueue(text: string, ts = Date.now()): void {
+  enqueue(text: string, ts = Date.now(), quote?: QuoteRef): void {
     const clean = text.trim();
     if (!clean) return;
-    this.pending.push({ text: clean, ts });
+    this.pending.push({ text: clean, ts, quote });
+    if (this.running && this.ownMode) {
+      this.abort?.abort();
+      return;
+    }
     if (!this.running) this.arm();
   }
 
@@ -72,6 +78,7 @@ export class ChatAgent {
 
   stop(): void {
     this.pending = [];
+    this.ownMode = false;
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -97,7 +104,8 @@ export class ChatAgent {
     const batch = this.pending.splice(0);
     const firstTs = batch[0]?.ts ?? Date.now();
     const text = batch.map((item) => item.text).join("\n");
-    await this.runTurn(text, firstTs, false);
+    const quote = batch.find((item) => item.quote)?.quote;
+    await this.runTurn(text, firstTs, false, quote);
     if (this.pending.length && !this.running) this.arm(300);
   }
 
@@ -108,7 +116,7 @@ export class ChatAgent {
     return this.sentInTurn;
   }
 
-  private async runTurn(text: string, firstTs: number, proactive: boolean): Promise<void> {
+  private async runTurn(text: string, firstTs: number, proactive: boolean, quote?: QuoteRef): Promise<void> {
     const { config, paths, memory } = this.ctx;
     const turnId = `turn-${Date.now().toString(36)}-${++this.turnSeq}`;
     this.running = true;
@@ -131,6 +139,7 @@ export class ChatAgent {
       const history = toLLMHistory(
         messagesBefore(paths, config, firstTs, historyLimit).filter((m) => m.ts >= this.historyFrom),
         historyLimit,
+        config,
       );
       const relationship = loadRelationship(paths, config);
       const rhythm = getRhythm(config, loadLife(paths), now);
@@ -169,7 +178,9 @@ export class ChatAgent {
         stickers,
       });
 
-      const body = proactive ? `<内心>\n${text}\n</内心>` : `${config.ownerTitle}：${text}`;
+      const body = proactive
+        ? `<内心>\n${text}\n</内心>`
+        : `${quote ? `${quoteLine(quote, config)}\n` : ""}${config.ownerTitle}：${text}`;
       const messages: LLMMessage[] = [
         { role: "system", content: system },
         ...history,
@@ -275,6 +286,132 @@ export class ChatAgent {
       this.emit({ type: "done", turnId });
       this.emit({ type: "busy", busy: false });
       this.onChange();
+    }
+  }
+
+  async runOwnTime(now: number, windowEnd: number): Promise<{ ok: boolean; summary: string; shares: string[]; error?: string }> {
+    const { config, paths, memory } = this.ctx;
+    if (this.running) return { ok: false, summary: "", shares: [], error: "正忙着。" };
+
+    this.running = true;
+    this.ownMode = true;
+    this.abort = new AbortController();
+    this.emit({ type: "busy", busy: true });
+    this.onChange();
+
+    try {
+      if (!config.model.apiKey.trim()) {
+        return { ok: false, summary: "", shares: [], error: "还没有配置 API Key。" };
+      }
+      if (!config.web.ownTimeEnabled) {
+        return { ok: false, summary: "", shares: [], error: "自己的时间关着。" };
+      }
+      const usage = todayUsage(paths, config);
+      const policy = costPolicy(config, usage, now);
+      if (!policy.allowOwnTime) {
+        return { ok: false, summary: "", shares: [], error: policy.reason };
+      }
+
+      const day = dayKey(now, config.behavior.rotateHour, config.behavior.timezone);
+      const relationship = loadRelationship(paths, config);
+      const rhythm = getRhythm(config, loadLife(paths), now);
+      const mood = loadMood(paths, config);
+      const room = loadRoom(paths);
+      const reminders = pendingReminders(paths);
+      const todaySummary = timelineSummary(paths, config, day);
+      const recalls = memory.recall("最近 自己 想做的事 笔记", 3);
+      const justRemembered = memory.recentInbox(3);
+
+      const system = buildSystem({
+        config,
+        kind: "own",
+        memory: memory.prompt(),
+        relationship,
+        yesterdaySummary: yesterdayDigest(paths, config),
+        room,
+        persona: this.ctx.persona,
+      });
+      const nowBlock = buildNow({
+        config,
+        kind: "own",
+        now,
+        rhythm: rhythmPrompt(rhythm, config),
+        mood,
+        room,
+        todaySummary,
+        reminders,
+        relationship,
+        lastOwnerAt: lastOwnerMessageAt(paths, config),
+        todayMessages: todayMessageCount(paths, config),
+        proactiveToday: todayProactiveCount(paths, config),
+        recalls,
+        justRemembered,
+        stickers: [],
+        activity: "自己的时间",
+      });
+
+      const canWeb = config.web.enabled;
+      const body = `<内心>
+现在是你的自己的时间（${formatClock(now, config.behavior.timezone)} 到 ${formatClock(windowEnd, config.behavior.timezone)}）。主人没有来找你。
+你可以先翻翻笔记（note_read）或记忆（recall），${canWeb ? "看看订阅（rss_read），挑一篇读（web_read），或者搜一下（web_search），" : "今天网络关着，就在房间里待着，"}或者什么都不做。
+如果看到什么真想告诉他，用 tell_owner（今天最多 ${config.speak.tellOwnerMaxPerDay} 次）。
+不要为了显得有用而做事。结束时用一两句话记下你做了什么、想了什么。
+</内心>`;
+
+      const outbox: OutboxItem[] = [];
+      const toolContext: ToolContext = {
+        config,
+        paths,
+        scene: "own",
+        memory,
+        now,
+        outbox,
+      };
+      const result = await runToolLoop({
+        config,
+        paths,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: `${nowBlock}
+
+${body}` },
+        ],
+        scene: "own",
+        maxSteps: Math.min(8, Math.max(3, policy.maxToolSteps + 2)),
+        maxTokens: policy.maxOutputTokens,
+        toolContext,
+        kind: "own",
+        signal: this.abort.signal,
+      });
+
+      const summary = cleanReply(result.content).slice(0, 1200) || "在房间里坐了一会儿，什么也没做。";
+      appendOwnLog(paths, config, summary, now);
+      const shares = outbox.filter((item) => item.kind === "text").map((item) => item.text.trim()).filter(Boolean);
+      const nextMood = applyMood(loadMood(paths, config), { ...heuristicMood(summary), source: "own" }, config);
+      saveMood(paths, nextMood);
+      this.emit({ type: "mood", mood: nextMood });
+      appendTimeline(paths, config, {
+        kind: "own",
+        text: `过了会儿自己的时间：${summary.replace(/\s+/g, " ").slice(0, 80)}`,
+        meta: { shares: shares.length },
+        ts: now,
+      });
+      this.emit({
+        type: "timeline",
+        event: { ts: now, kind: "own", text: "自己的时间" },
+      });
+      return { ok: true, summary, shares };
+    } catch (error) {
+      if (this.abort?.signal.aborted) return { ok: false, summary: "", shares: [], error: "被打断了。" };
+      const message = error instanceof Error ? error.message : "自己的时间出了点问题。";
+      return { ok: false, summary: "", shares: [], error: message };
+    } finally {
+      this.running = false;
+      this.ownMode = false;
+      this.abort = null;
+      this.emit({ type: "busy", busy: false });
+      this.onChange();
+      if (this.pending.length) this.arm(400);
     }
   }
 

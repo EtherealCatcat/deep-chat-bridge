@@ -13,8 +13,16 @@ import { dueReminders, markReminderDone } from "./care.js";
 import { diaryTarget, writeDiary } from "./diary.js";
 import { consolidateMemory, hasInbox } from "./consolidate.js";
 import { lastAssistantMessageAt, lastOwnerMessageAt, todayProactiveCount } from "./chat.js";
-import { dayKey, formatClock, humanGap, zonedParts } from "./time.js";
+import { dayKey, formatClock, humanDuration, humanGap, zonedParts } from "./time.js";
 import { appendTimeline } from "./timeline.js";
+import {
+  canShareNow,
+  ensureOwnSchedule,
+  loadOwn,
+  markOwnEnd,
+  markOwnStart,
+  saveOwn,
+} from "./own.js";
 
 export interface SchedulerContext {
   config: AppConfig;
@@ -76,7 +84,7 @@ export class Scheduler {
     const gap = life.lastTick ? now - life.lastTick : 0;
 
     if (gap > 3 * 60_000 && life.lastTick > 0) {
-      appendTimeline(paths, config, { kind: "resume_gap", text: `电脑睡了 ${humanGap(gap)}`, meta: { gap } });
+      appendTimeline(paths, config, { kind: "resume_gap", text: `电脑睡了 ${humanDuration(gap)}` });
       life.lastResumeGapAt = now;
     }
     life.lastTick = now;
@@ -128,6 +136,10 @@ export class Scheduler {
     }
 
     await this.fireReminders(now, rhythm);
+
+    if (config.web.ownTimeEnabled && !agent.busy) {
+      await this.maybeOwnTime(now, rhythm, policy);
+    }
 
     if (policy.allowProactive && !agent.busy) {
       await this.maybeSpeak(now, rhythm);
@@ -186,6 +198,56 @@ export class Scheduler {
       // own / mood jobs are not implemented in P0–P3; drop them silently.
     }
     saveDeferred(paths, remaining);
+  }
+
+  private async maybeOwnTime(
+    now: number,
+    rhythm: ReturnType<typeof getRhythm>,
+    policy: ReturnType<typeof costPolicy>,
+  ): Promise<void> {
+    const { config, paths, agent } = this.ctx;
+    if (!config.web.ownTimeEnabled) return;
+    if (rhythm.phase !== "awake" || isQuietHours(config, now)) return;
+
+    let own = ensureOwnSchedule(config, now, loadOwn(paths));
+    if (!policy.allowOwnTime) {
+      saveOwn(paths, own);
+      return;
+    }
+    if (!own.nextAt || own.nextAt > now || own.windowEnd <= now) {
+      saveOwn(paths, own);
+      return;
+    }
+
+    const windowEnd = own.windowEnd;
+    markOwnStart(own, now, windowEnd);
+    saveOwn(paths, own);
+    this.ctx.onChange();
+
+    const result = await agent.runOwnTime(now, windowEnd);
+
+    own = loadOwn(paths);
+    markOwnEnd(own, Date.now(), result.ok ? result.summary : result.error || "在房间里坐了一会儿。");
+    own = ensureOwnSchedule(config, Date.now(), own);
+
+    if (result.ok) {
+      const remainingShares = Math.max(0, config.speak.tellOwnerMaxPerDay - own.shareCount);
+      for (const share of result.shares.slice(0, remainingShares)) {
+        if (canShareNow(own, config, Date.now())) {
+          await agent.say(share, true);
+          own.shareCount += 1;
+          appendTimeline(paths, config, { kind: "share", text: `忍不住告诉他：${share.slice(0, 80)}` });
+        } else {
+          own.pendingShares.push(share);
+          own.pendingShares = own.pendingShares.slice(-6);
+          appendTimeline(paths, config, { kind: "share", text: `想分享，先记着：${share.slice(0, 80)}` });
+        }
+      }
+    } else if (result.error && result.error !== "被打断了。") {
+      appendTimeline(paths, config, { kind: "own", text: `自己的时间没去成：${result.error}` });
+    }
+    saveOwn(paths, own);
+    this.ctx.onChange();
   }
 
   private async fireReminders(now: number, rhythm: ReturnType<typeof getRhythm>): Promise<void> {

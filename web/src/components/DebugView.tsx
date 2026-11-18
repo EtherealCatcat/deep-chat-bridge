@@ -210,6 +210,10 @@ export function DebugView({ showToast }: { showToast: (text: string, kind?: "inf
             <Pre text={JSON.stringify(data.life, null, 2)} />
           </Card>
           <Card className="p-4">
+            <div className="mb-2 text-[10px] uppercase tracking-[0.16em] text-ink-faint">own.json</div>
+            <Pre text={JSON.stringify(data.own, null, 2)} />
+          </Card>
+          <Card className="p-4">
             <div className="mb-2 text-[10px] uppercase tracking-[0.16em] text-ink-faint">deferred.json</div>
             <Pre text={JSON.stringify(data.deferred, null, 2)} />
           </Card>

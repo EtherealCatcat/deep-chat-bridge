@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
-import type { AppConfig } from "./types.js";
+import type { AppConfig, QuoteRef } from "./types.js";
 import { dataRoot, deepMerge, ensureLayout, loadConfig, maskConfig, paths, saveConfig } from "./config.js";
 import { MemoryStore } from "./memory.js";
 import { ChatAgent } from "./agent.js";
@@ -23,6 +23,8 @@ import { todayUsage } from "./usage.js";
 import { MODEL_PRICES, costPolicy, peakInfo } from "./pricing.js";
 import { callLLM } from "./llm.js";
 import { listStickers } from "./stickers.js";
+import { loadOwn, ownStateSnapshot } from "./own.js";
+import { readOwnLog } from "./web.js";
 import { backupFile, exists, readText, writeText } from "./store.js";
 import { dayKey, formatClock, weekdayCN } from "./time.js";
 import type { ServerEvent } from "./events.js";
@@ -141,11 +143,24 @@ app.post("/api/messages", async (request, reply) => {
   const text = String(body.text ?? "").trim();
   if (!text) return reply.code(400).send({ error: "说点什么吧。" });
   if (text.length > 4000) return reply.code(413).send({ error: "太长了，分几次说。" });
+  const quoteId = String(body.quoteId ?? "").trim();
+  let quote: QuoteRef | undefined;
+  if (quoteId) {
+    const original = recentMessages(p, config, 300).find((m) => m.id === quoteId);
+    if (!original) return reply.code(400).send({ error: "引用的消息找不到了。" });
+    quote = {
+      id: original.id,
+      role: original.role,
+      kind: original.kind,
+      text: original.text.slice(0, 240),
+      ts: original.ts,
+    };
+  }
   unread = 0;
-  const message = appendChatMessage(p, config, { role: "user", kind: "text", text });
+  const message = appendChatMessage(p, config, { role: "user", kind: "text", text, quote });
   updateStreak(p, config);
   emit({ type: "message", message });
-  agent.enqueue(text);
+  agent.enqueue(text, undefined, quote);
   return { ok: true, message };
 });
 
@@ -327,9 +342,30 @@ app.get("/api/usage", async () => ({
 
 app.get("/api/stickers", async () => ({ stickers: listStickers(p) }));
 
+app.get("/api/own", async () => {
+  const state = loadOwn(p);
+  return {
+    ...ownStateSnapshot(state, config, Date.now()),
+    state,
+    log: readOwnLog(p, config),
+    notes: readText(`${p.web}/notes.md`, "（还没有笔记。）"),
+  };
+});
+
+app.get("/api/own/log", async (request, reply) => {
+  const query = request.query as { day?: string };
+  const raw = String(query.day ?? "").trim();
+  const day = raw || dayKey(Date.now(), config.behavior.rotateHour, config.behavior.timezone);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return reply.code(400).send({ error: "日期格式不对。" });
+  }
+  return { day, content: readOwnLog(p, config, day) };
+});
+
 app.get("/api/debug", async () => ({
   status: currentStatus(),
   life: loadLife(p),
+  own: loadOwn(p),
   deferred: loadDeferred(p),
   usage: todayUsage(p, config),
   timeline: readTimeline(p, dayKey(Date.now(), config.behavior.rotateHour, config.behavior.timezone)).slice(-20),
@@ -396,6 +432,10 @@ app.put("/api/settings", async (request, reply) => {
   next.behavior.maxOutputTokensPeak = Math.max(80, Math.min(2000, Number(next.behavior.maxOutputTokensPeak) || 320));
   next.speak.chance = Math.max(0, Math.min(1, Number(next.speak.chance) || 0.3));
   next.mood.base = Math.max(0, Math.min(100, Number(next.mood.base) || 65));
+  next.web.enabled = Boolean(next.web.enabled);
+  next.web.ownTimeEnabled = Boolean(next.web.ownTimeEnabled);
+  if (!Array.isArray(next.web.rssFeeds)) next.web.rssFeeds = [];
+  next.web.rssFeeds = next.web.rssFeeds.filter((item): item is string => typeof item === "string" && item.startsWith("http"));
 
   saveConfig(p, next);
   config = next;

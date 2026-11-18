@@ -195,7 +195,7 @@ const TOOLS: ToolDefinition[] = [
   {
     name: "send_sticker",
     description: "发一个表情。名字要从表情清单里选。",
-    scenes: ["chat", "own"],
+    scenes: ["chat"],
     parameters: {
       type: "object",
       properties: { name: { type: "string", description: "表情名，例如 开心、贴贴、困。" } },
@@ -214,7 +214,7 @@ const TOOLS: ToolDefinition[] = [
   {
     name: "send_image",
     description: "发一张本机 media 目录里的图片给主人。",
-    scenes: ["chat", "own"],
+    scenes: ["chat"],
     parameters: {
       type: "object",
       properties: { path: { type: "string", description: "media 目录下的文件名。" } },
@@ -257,6 +257,7 @@ const TOOLS: ToolDefinition[] = [
       additionalProperties: false,
     },
     async run(ctx, args) {
+      if (!ctx.config.web.enabled) return "今天网络关着，改天再看吧。";
       const page = await webRead(str(args, "url"));
       appendTimeline(ctx.paths, ctx.config, { kind: "read", text: `读了《${page.title}》`, ts: ctx.now });
       return wrapUntrusted(page.title, page.url, page.text.slice(0, 5000));
@@ -273,6 +274,7 @@ const TOOLS: ToolDefinition[] = [
       additionalProperties: false,
     },
     async run(ctx, args) {
+      if (!ctx.config.web.enabled) return "今天网络关着，改天再搜吧。";
       const results = await webSearch(str(args, "query"), 5);
       return results.map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.snippet}`).join("\n\n");
     },
@@ -283,6 +285,7 @@ const TOOLS: ToolDefinition[] = [
     scenes: ["own"],
     parameters: { type: "object", properties: {}, additionalProperties: false },
     async run(ctx) {
+      if (!ctx.config.web.enabled) return "今天网络关着，改天再看订阅吧。";
       const items = await rssRead(ctx.config, 8);
       if (!items.length) return "今天订阅里没什么新东西。";
       return items.map((item, i) => `${i + 1}. ${item.title}\n${item.url}\n${item.text}`).join("\n\n");

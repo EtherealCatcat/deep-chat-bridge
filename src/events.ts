@@ -30,6 +30,14 @@ export interface StatusSnapshot {
   lastOwnerAt: number;
   lastMessageAt: number;
   activity: string;
+  own: {
+    enabled: boolean;
+    active: boolean;
+    nextAt: number;
+    windowEnd: number;
+    label: string;
+    lastResult: string;
+  };
 }
 
 export type ServerEvent =

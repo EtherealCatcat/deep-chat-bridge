@@ -121,6 +121,22 @@ export interface Status {
   lastOwnerAt: number;
   lastMessageAt: number;
   activity: string;
+  own: {
+    enabled: boolean;
+    active: boolean;
+    nextAt: number;
+    windowEnd: number;
+    label: string;
+    lastResult: string;
+  };
+}
+
+export interface QuoteRef {
+  id: string;
+  role: "user" | "assistant";
+  kind: ChatMessage["kind"];
+  text: string;
+  ts: number;
 }
 
 export interface ChatMessage {
@@ -131,6 +147,7 @@ export interface ChatMessage {
   text: string;
   dayKey: string;
   meta?: Record<string, unknown>;
+  quote?: QuoteRef;
 }
 
 export type ServerEvent =
@@ -223,7 +240,7 @@ export interface AppConfig {
   };
   mood: { enabled: boolean; base: number; halfLifeHours: number };
   cost: { dailyBudgetCny: number; peakPolicy: boolean };
-  web: { enabled: boolean; rssFeeds: string[] };
+  web: { enabled: boolean; ownTimeEnabled: boolean; rssFeeds: string[] };
   ui: { port: number };
 }
 
@@ -238,6 +255,7 @@ export interface SettingsPayload {
 export interface DebugPayload {
   status: Status;
   life: Record<string, unknown>;
+  own: Record<string, unknown>;
   deferred: unknown[];
   usage: UsageDay;
   timeline: TimelineEvent[];

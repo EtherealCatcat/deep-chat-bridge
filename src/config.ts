@@ -123,6 +123,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   },
   web: {
     enabled: true,
+    ownTimeEnabled: true,
     rssFeeds: ["https://sspai.com/feed", "https://hnrss.org/frontpage"],
   },
   ui: { port: 7788 },

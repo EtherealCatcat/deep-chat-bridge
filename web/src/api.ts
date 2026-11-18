@@ -43,10 +43,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   status: () => request<Status>("/api/status"),
   messages: (limit = 120) => request<{ messages: ChatMessage[] }>(`/api/messages?limit=${limit}`),
-  send: (text: string) =>
+  send: (text: string, quoteId?: string) =>
     request<{ ok: boolean; message: ChatMessage }>("/api/messages", {
       method: "POST",
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, quoteId }),
     }),
   read: () => request<{ ok: boolean }>("/api/read", { method: "POST" }),
   stop: () => request<{ ok: boolean }>("/api/stop", { method: "POST" }),

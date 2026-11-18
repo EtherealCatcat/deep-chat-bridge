@@ -9,6 +9,7 @@ import { costPolicy } from "./pricing.js";
 import { todayUsage } from "./usage.js";
 import { lastAssistantMessageAt, lastOwnerMessageAt, todayMessageCount, todayProactiveCount } from "./chat.js";
 import type { StatusSnapshot } from "./events.js";
+import { loadOwn, ownStateSnapshot } from "./own.js";
 
 export function buildStatus(input: {
   config: AppConfig;
@@ -24,6 +25,7 @@ export function buildStatus(input: {
   const room = loadRoom(paths);
   const relationship = loadRelationship(paths, config);
   const usage = todayUsage(paths, config);
+  const own = ownStateSnapshot(loadOwn(paths), config, now);
   return {
     name: config.name,
     ownerTitle: config.ownerTitle,
@@ -51,6 +53,7 @@ export function buildStatus(input: {
     proactiveToday: todayProactiveCount(paths, config),
     lastOwnerAt: lastOwnerMessageAt(paths, config),
     lastMessageAt: lastAssistantMessageAt(paths, config),
-    activity: room.status,
+    activity: own.active ? own.label : room.status,
+    own,
   };
 }

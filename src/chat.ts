@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { AppConfig, ChatMessage, LLMMessage } from "./types.js";
+import type { AppConfig, ChatMessage, LLMMessage, QuoteRef } from "./types.js";
 import type { Paths } from "./config.js";
 import { appendJsonl, readJsonl, readText, writeJson, exists } from "./store.js";
 import { addDays, dayKey, dayStartTs, formatClock } from "./time.js";
@@ -69,14 +69,24 @@ export function lastAssistantMessageAt(p: Paths, config: AppConfig): number {
   return assistant?.ts ?? 0;
 }
 
-export function toLLMHistory(messages: ChatMessage[], max: number): LLMMessage[] {
+export function quoteLine(quote: QuoteRef, config?: AppConfig): string {
+  const who = quote.role === "user" ? config?.ownerTitle ?? "主人" : config?.name ?? "鲸鲸";
+  const time = formatClock(quote.ts, config?.behavior.timezone ?? "Asia/Shanghai");
+  const text = quote.text.replace(/\s+/g, " ").trim().slice(0, 160);
+  return `（引用 ${who} ${time}：${text || "……"}）`;
+}
+
+export function toLLMHistory(messages: ChatMessage[], max: number, config?: AppConfig): LLMMessage[] {
   const visible = messages
     .filter((m) => m.kind === "text" || m.kind === "sticker")
     .slice(-max)
-    .map<LLMMessage>((m) => ({
-      role: m.role,
-      content: m.kind === "sticker" ? `[表情:${m.text}]` : m.text,
-    }));
+    .map<LLMMessage>((m) => {
+      const body = m.kind === "sticker" ? `[表情:${m.text}]` : m.text;
+      return {
+        role: m.role,
+        content: m.quote ? `${quoteLine(m.quote, config)}\n${body}` : body,
+      };
+    });
   return visible;
 }
 

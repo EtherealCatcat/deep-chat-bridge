@@ -90,6 +90,7 @@ export interface CostConfig {
 
 export interface WebConfig {
   enabled: boolean;
+  ownTimeEnabled: boolean;
   rssFeeds: string[];
 }
 
@@ -106,6 +107,14 @@ export interface AppConfig {
   ui: { port: number };
 }
 
+export interface QuoteRef {
+  id: string;
+  role: "user" | "assistant";
+  kind: ChatMessage["kind"];
+  text: string;
+  ts: number;
+}
+
 export interface ChatMessage {
   id: string;
   ts: number;
@@ -114,6 +123,23 @@ export interface ChatMessage {
   text: string;
   dayKey: string;
   meta?: Record<string, unknown>;
+  quote?: QuoteRef;
+}
+
+export interface OwnTimeState {
+  nextAt: number;
+  windowEnd: number;
+  windowKey: string;
+  activeUntil: number;
+  day: string;
+  runsToday: number;
+  lastWindowKey: string;
+  lastRunAt: number;
+  lastResult: string;
+  shareDay: string;
+  shareCount: number;
+  pendingShares: string[];
+  updatedAt: number;
 }
 
 export interface TimelineEvent {

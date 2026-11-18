@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { CheckCheck, Feather, Send, Sparkles } from "lucide-react";
-import type { ChatMessage, Status } from "../types";
+import { CheckCheck, Feather, Quote, Send, Sparkles, X } from "lucide-react";
+import type { ChatMessage, QuoteRef, Status } from "../types";
 import { API_BASE, formatDay, formatTime } from "../api";
 import { WhaleAvatar } from "./ui";
 
@@ -22,14 +22,32 @@ function DayDivider({ day }: { day: string }) {
   );
 }
 
+function QuoteBlock({ quote }: { quote: QuoteRef }) {
+  const who = quote.role === "user" ? "你" : "鲸鲸";
+  const body = quote.kind === "sticker" ? `[表情] ${quote.text}` : quote.text;
+  return (
+    <button
+      type="button"
+      onClick={() => document.getElementById(`msg-${quote.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
+      className="mb-1.5 block w-full rounded-lg border-l-2 border-coral/45 bg-ink/[0.04] px-2.5 py-1.5 text-left transition hover:bg-ink/[0.07]"
+      title="跳到原消息"
+    >
+      <div className="truncate text-[9.5px] text-coral-deep/80">{who}</div>
+      <div className="line-clamp-2 text-[10.5px] leading-4 text-ink-soft">{body}</div>
+    </button>
+  );
+}
+
 function MessageRow({
   message,
   readAt,
   lastAssistant,
+  onQuote,
 }: {
   message: ChatMessage;
   readAt: number | null;
   lastAssistant: boolean;
+  onQuote: (message: ChatMessage) => void;
 }) {
   const proactive = Boolean(message.meta?.proactive);
 
@@ -37,11 +55,20 @@ function MessageRow({
 
   if (message.role === "user") {
     return (
-      <div className="fade-up flex justify-end">
+      <div id={`msg-${message.id}`} className="fade-up group flex justify-end">
         <div className="min-w-0 max-w-[82%]">
+          {message.quote ? <QuoteBlock quote={message.quote} /> : null}
           <div className="bubble-me">{message.text}</div>
-          <div className="mt-1 pr-1 text-right text-[10px] text-ink-faint">
-            {formatTime(message.ts)}
+          <div className="mt-1 flex items-center justify-end gap-1.5 pr-1 text-[10px] text-ink-faint">
+            <button
+              type="button"
+              onClick={() => onQuote(message)}
+              className="inline-flex items-center gap-0.5 text-[9.5px] opacity-0 transition hover:text-coral group-hover:opacity-100"
+            >
+              <Quote className="h-2.5 w-2.5" />
+              引用
+            </button>
+            <span>{formatTime(message.ts)}</span>
           </div>
         </div>
       </div>
@@ -51,7 +78,7 @@ function MessageRow({
   if (message.kind === "sticker") {
     const emoji = String(message.meta?.emoji ?? "🫧");
     return (
-      <div className="fade-up flex items-start gap-2.5">
+      <div id={`msg-${message.id}`} className="fade-up flex items-start gap-2.5">
         <MiniAvatar />
         <div>
           <div className="grid h-20 w-20 place-items-center rounded-[20px] border border-line/60 bg-white/55 text-4xl shadow-sm">
@@ -66,7 +93,7 @@ function MessageRow({
   if (message.kind === "image") {
     const file = String(message.meta?.file ?? "");
     return (
-      <div className="fade-up flex items-start gap-2.5">
+      <div id={`msg-${message.id}`} className="fade-up flex items-start gap-2.5">
         <MiniAvatar />
         <img
           src={`${API_BASE}/media/${file.replace(/^\/+/, "")}`}
@@ -79,22 +106,30 @@ function MessageRow({
 
   if (message.kind === "monologue") {
     return (
-      <div className="fade-up flex items-start gap-2.5">
+      <div id={`msg-${message.id}`} className="fade-up group flex items-start gap-2.5">
         <div className="w-7 shrink-0" />
         <div className="monologue">
           <div className="mb-1 text-[9px] font-sans uppercase tracking-[0.18em] text-ink-faint">
             心里想
           </div>
           {message.text}
+          <button
+            type="button"
+            onClick={() => onQuote(message)}
+            className="ml-2 inline-flex align-middle text-[9px] text-ink-faint opacity-0 transition hover:text-coral group-hover:opacity-100"
+          >
+            引用
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="fade-up flex items-start gap-2.5">
+    <div id={`msg-${message.id}`} className="fade-up group flex items-start gap-2.5">
       <MiniAvatar />
       <div className="min-w-0 max-w-[82%]">
+        {message.quote ? <QuoteBlock quote={message.quote} /> : null}
         {proactive ? (
           <div className="mb-1 flex items-center gap-1 pl-0.5 text-[9.5px] tracking-[0.06em] text-coral/75">
             <Sparkles className="h-2.5 w-2.5" />
@@ -104,6 +139,14 @@ function MessageRow({
         <div className="bubble-her">{message.text}</div>
         <div className="mt-1 flex items-center gap-1.5 pl-1 text-[10px] text-ink-faint">
           <span>{formatTime(message.ts)}</span>
+          <button
+            type="button"
+            onClick={() => onQuote(message)}
+            className="inline-flex items-center gap-0.5 text-[9.5px] opacity-0 transition hover:text-coral group-hover:opacity-100"
+          >
+            <Quote className="h-2.5 w-2.5" />
+            引用
+          </button>
           {lastAssistant && readAt && readAt >= message.ts ? (
             <span className="inline-flex items-center gap-0.5 text-sea/80">
               <CheckCheck className="h-3 w-3" />
@@ -158,10 +201,11 @@ export function ChatView({
   messages: ChatMessage[];
   typing: boolean;
   readAt: number | null;
-  onSend: (text: string) => Promise<void>;
+  onSend: (text: string, quote?: ChatMessage) => Promise<void>;
   onNavigateSettings: () => void;
 }) {
   const [text, setText] = useState("");
+  const [quote, setQuote] = useState<ChatMessage | null>(null);
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -169,6 +213,10 @@ export function ChatView({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
+
+  useEffect(() => {
+    if (quote && !messages.some((m) => m.id === quote.id)) setQuote(null);
+  }, [messages, quote]);
 
   useEffect(() => {
     stick.current = true;
@@ -195,8 +243,9 @@ export function ChatView({
     if (!content || sending) return;
     setSending(true);
     try {
-      await onSend(content);
+      await onSend(content, quote ?? undefined);
       setText("");
+      setQuote(null);
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
         textareaRef.current.focus();
@@ -290,6 +339,10 @@ export function ChatView({
                 message={message}
                 readAt={readAt}
                 lastAssistant={message.id === lastAssistantId}
+                onQuote={(target) => {
+                  setQuote(target);
+                  textareaRef.current?.focus();
+                }}
               />
             </Fragment>
           ))}
@@ -301,6 +354,27 @@ export function ChatView({
 
       <div className="border-t border-line/55 bg-[rgba(247,240,230,0.55)] px-4 pb-4 pt-3 backdrop-blur-md sm:px-7">
         <div className="mx-auto w-full max-w-[780px]">
+          {quote ? (
+            <div className="mb-2 flex items-start gap-2 rounded-xl border border-coral/25 bg-coral/5 px-3 py-2">
+              <Quote className="mt-0.5 h-3 w-3 shrink-0 text-coral/70" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[9px] tracking-[0.08em] text-coral-deep/75">
+                  引用 {quote.role === "user" ? "你" : "鲸鲸"}
+                </div>
+                <div className="mt-0.5 truncate text-[10.5px] text-ink-soft">
+                  {quote.kind === "sticker" ? `[表情] ${quote.text}` : quote.text}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuote(null)}
+                className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-ink-faint transition hover:bg-white/70 hover:text-coral"
+                title="取消引用"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ) : null}
           <div className="flex items-end gap-2 rounded-[20px] border border-line/80 bg-[rgba(255,252,247,0.82)] p-1.5 pl-4 shadow-[0_8px_26px_rgba(82,61,42,.05)] transition focus-within:border-coral/40 focus-within:shadow-[0_0_0_3px_rgba(207,114,87,.08)]">
             <textarea
               ref={textareaRef}
@@ -313,6 +387,10 @@ export function ChatView({
                 el.style.height = `${Math.min(el.scrollHeight, 150)}px`;
               }}
               onKeyDown={(event) => {
+                if (event.key === "Escape" && quote) {
+                  setQuote(null);
+                  return;
+                }
                 if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   void submit();

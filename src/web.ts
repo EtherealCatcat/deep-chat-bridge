@@ -7,6 +7,7 @@ import Parser from "rss-parser";
 import type { AppConfig } from "./types.js";
 import type { Paths } from "./config.js";
 import { appendText, ensureDir, readText, writeText } from "./store.js";
+import { dayKey, formatClock } from "./time.js";
 
 const MAX_BYTES = 2_500_000;
 const MAX_CHARS = 7000;
@@ -180,6 +181,24 @@ export function appendNote(p: Paths, text: string): void {
 
 export function readNotes(p: Paths): string {
   return readText(notesFile(p), "（还没有笔记。）");
+}
+
+export function ownLogFile(p: Paths, config: AppConfig, ts = Date.now()): string {
+  return path.join(p.web, "own", `${dayKey(ts, config.behavior.rotateHour, config.behavior.timezone)}.md`);
+}
+
+export function appendOwnLog(p: Paths, config: AppConfig, text: string, ts = Date.now()): void {
+  const file = ownLogFile(p, config, ts);
+  ensureDir(path.dirname(file));
+  const clean = text.trim();
+  if (!clean) return;
+  appendText(file, `\n## ${formatClock(ts, config.behavior.timezone)}\n\n${clean}\n`);
+}
+
+export function readOwnLog(p: Paths, config: AppConfig, day?: string): string {
+  const safeDay = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : undefined;
+  const file = safeDay ? path.join(p.web, "own", `${safeDay}.md`) : ownLogFile(p, config);
+  return readText(file, "（今天还没过自己的时间。）");
 }
 
 export function writeNotes(p: Paths, text: string): void {

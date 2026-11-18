@@ -198,7 +198,7 @@ const TOOLS: ToolDefinition[] = [
     scenes: ["chat"],
     parameters: {
       type: "object",
-      properties: { name: { type: "string", description: "表情名，例如 开心、贴贴、困。" } },
+      properties: { name: { type: "string", description: "表情名，例如 打招呼、笑一个、困困鱼、无语鱼。" } },
       required: ["name"],
       additionalProperties: false,
     },

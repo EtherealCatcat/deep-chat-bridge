@@ -140,7 +140,7 @@ export function buildNow(input: NowInput): string {
   }
   if (recalls.length) lines.push(`【想起】${recalls.map((r) => r.replace(/\s+/g, " ").slice(0, 180)).join(" / ")}`);
   if (justRemembered.length) lines.push(`【刚记住】${justRemembered.slice(-4).join("；")}`);
-  if (stickers.length) lines.push(`【新表情】${stickers.slice(0, 4).map((s) => s.name).join("、")}`);
+  if (stickers.length) lines.push(`【表情】${stickers.map((s) => s.name).join("、")}`);
   lines.push("</此刻>");
   return lines.join("\n");
 }

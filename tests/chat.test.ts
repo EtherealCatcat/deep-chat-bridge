@@ -20,6 +20,34 @@ describe("quoted messages", () => {
     expect(line).toContain("今天有点累");
   });
 
+  it("renders image and sticker references compactly", () => {
+    const imageQuote = { ...quote, kind: "image" as const, text: "看看这个" };
+    expect(quoteLine(imageQuote, config)).toContain("[图片]");
+    const messages: ChatMessage[] = [
+      {
+        id: "i1",
+        ts: quote.ts,
+        role: "user",
+        kind: "image",
+        text: "看看这个",
+        meta: { file: "inbox-1.png" },
+        dayKey: "2026-11-18",
+      },
+      {
+        id: "s1",
+        ts: quote.ts + 1000,
+        role: "assistant",
+        kind: "sticker",
+        text: "打招呼",
+        meta: { file: "hello.webp" },
+        dayKey: "2026-11-18",
+      },
+    ];
+    const history = toLLMHistory(messages, 10, config);
+    expect(history[0].content).toContain("[图片：看看这个]");
+    expect(history[1].content).toContain("[表情:打招呼]");
+  });
+
   it("prepends quote lines to LLM history", () => {
     const messages: ChatMessage[] = [
       {

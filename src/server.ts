@@ -41,7 +41,7 @@ const memory = new MemoryStore(p, config);
 memory.ensure();
 updateStreak(p, config);
 
-const app = Fastify({ logger: { level: "warn" }, bodyLimit: 2 * 1024 * 1024 });
+const app = Fastify({ logger: { level: "warn" }, bodyLimit: 20 * 1024 * 1024 });
 await app.register(cors, { origin: true, methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"] });
 
 const clients = new Set<NodeJS.WritableStream & { write: (chunk: string) => boolean }>();
@@ -141,8 +141,24 @@ app.get("/api/messages", async (request) => {
 app.post("/api/messages", async (request, reply) => {
   const body = requireObject(request.body);
   const text = String(body.text ?? "").trim();
-  if (!text) return reply.code(400).send({ error: "说点什么吧。" });
+  const rawImage = typeof body.image === "string" ? body.image.trim() : "";
+  if (!text && !rawImage) return reply.code(400).send({ error: "说点什么吧，或者发一张图片。" });
   if (text.length > 4000) return reply.code(413).send({ error: "太长了，分几次说。" });
+
+  let imageInfo: { file: string; mime: string } | undefined;
+  if (rawImage) {
+    const match = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=\s]+)$/.exec(rawImage);
+    if (!match) return reply.code(400).send({ error: "这张图片的格式不支持。" });
+    const mime = match[1];
+    const data = Buffer.from(match[2], "base64");
+    if (!data.length) return reply.code(400).send({ error: "这张图片是空的。" });
+    if (data.length > 8 * 1024 * 1024) return reply.code(413).send({ error: "这张图太大了，压缩一下再发。" });
+    const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : mime === "image/gif" ? "gif" : "jpg";
+    const file = `inbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    fs.writeFileSync(path.join(p.media, file), data);
+    imageInfo = { file, mime };
+  }
+
   const quoteId = String(body.quoteId ?? "").trim();
   let quote: QuoteRef | undefined;
   if (quoteId) {
@@ -156,11 +172,18 @@ app.post("/api/messages", async (request, reply) => {
       ts: original.ts,
     };
   }
+
   unread = 0;
-  const message = appendChatMessage(p, config, { role: "user", kind: "text", text, quote });
+  const message = appendChatMessage(p, config, {
+    role: "user",
+    kind: imageInfo ? "image" : "text",
+    text: text || "（发来一张图片）",
+    quote,
+    ...(imageInfo ? { meta: imageInfo } : {}),
+  });
   updateStreak(p, config);
   emit({ type: "message", message });
-  agent.enqueue(text, undefined, quote);
+  agent.enqueue(text || "（发来一张图片，看看是什么。）", undefined, quote, imageInfo);
   return { ok: true, message };
 });
 
@@ -456,6 +479,13 @@ app.setErrorHandler((error, _request, reply) => {
 await app.register(fastifyStatic, {
   root: p.media,
   prefix: "/media/",
+  decorateReply: false,
+  index: false,
+});
+
+await app.register(fastifyStatic, {
+  root: p.stickers,
+  prefix: "/stickers/",
   decorateReply: false,
   index: false,
 });

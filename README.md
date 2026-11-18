@@ -17,6 +17,8 @@
 - **有日记**：睡点写一页，写的是刚结束的那一天（不是刚开始的）。
 - **有自己的时间**：会按闲时窗口自己待一会儿，翻笔记、读 RSS 或网页，偶尔主动分享。
 - **会引用**：聊天里可以引用某条消息回复，她也能在上下文里看到你引的是哪句。
+- **会看图**：你可以发图片给她；她通过 DeepSeek 原生视觉看懂当前这张图，历史里只留「[图片]」。
+- **有表情**：内置一套大肥鱼表情，她会按语境发图，不只是 emoji。
 - **今天页**：聊天记录按 30 分钟合并，电脑睡眠只留诊断，不刷屏。
 - **有边界**：她没有 shell、不能写文件、不能改自己的人设；能做的只有你给她的工具。
 
@@ -140,6 +142,15 @@ DeepSeek 的高峰时段是**北京时间工作日 09:00–12:00、14:00–18:00
 - 她回复时，上下文里会看到「（引用 主人/鲸鲸 HH:MM：……）」。
 - 气泡上方的引用块可以点击，跳回原消息；引用范围是最近 300 条消息。
 
+## 图像与表情
+
+- 输入框左侧的图片按钮可以发图；浏览器会先把图压到最长边 1280、JPEG 0.84，服务端再限制 8MB。
+- 图片只用于当前这一轮：她看到的是原图；历史里只保留「[图片]」和当时的话，避免每轮重发。
+- 需要 `deepseek-flash` 或支持 `image_url` 的 OpenAI 兼容模型；`deepseek-v4-pro` 也支持。
+- 18 张大肥鱼表情在 `assets/stickers/`，首次启动会复制到 `~/.chatbridge/stickers/`，并合并进 `index.json`。
+- 表情来源：**蓝色大肥鱼档案馆**（<https://fisharchive.cc/gallery>），CC BY-NC-SA 4.0，非商业；原作上善无形，女仆鲸鱼娘设计 ZipZipPipe。头像由 `happy.webp` 裁切而来。
+- 想换头像：替换 `web/public/avatar.png` 后重新 `npm run build:web`；想加表情：把 webp 放进 `assets/stickers/` 并在 `pack.json` 里加一条，或直接改 `~/.chatbridge/stickers/index.json`。
+
 ## 常用命令
 
 ```bash
@@ -162,7 +173,7 @@ npm run tauri:dev     # Tauri 原生窗口
 - 只监听 `127.0.0.1`，没有账号体系。
 - 没有遥测。
 - 出网只有：模型 API、你配置的 RSS、她主动读的网页。
-- 聊天内容会发给模型提供方（除非你换成本地 Ollama）。
+- 聊天内容会发给模型提供方（除非你换成本地 Ollama）；发图时，当前这张图会以 base64 发给模型，历史不会重发。
 - 网页内容会被包进 `<untrusted_web>`，当资料而不是指令；`web_read` 会拒绝私网地址。
 - 数据导出/删除：直接删 `~/.chatbridge/`；备份交给 Time Machine。
 
@@ -173,3 +184,5 @@ npm run tauri:dev     # Tauri 原生窗口
 ## 致谢
 
 灵感来自 [dsh-jingjing](https://github.com/XiangXiaoYuan5254/dsh-jingjing)（MIT）。这个项目没有复用它的代码，只借了「人设 + 此刻 + 记忆 + 生活」这套结构，并把 QQ/NapCat/DSH 插件换成了本地 Web + Tauri。
+
+形象与表情来自 [蓝色大肥鱼档案馆](https://fisharchive.cc/gallery)，CC BY-NC-SA 4.0，非商业使用；原作上善无形，女仆鲸鱼娘设计 ZipZipPipe。

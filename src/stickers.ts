@@ -17,18 +17,61 @@ const BUILTIN: Sticker[] = [
   { name: "哼", emoji: "😾", desc: "嘴硬", scene: "闹小脾气", addedAt: 0 },
 ];
 
+interface StickerPack {
+  name?: string;
+  attribution?: string;
+  items?: { name: string; file: string; desc?: string; scene?: string }[];
+}
+
 function indexFile(p: Paths): string {
   return path.join(p.stickers, "index.json");
 }
 
+function packDir(): string {
+  return path.join(process.cwd(), "assets", "stickers");
+}
+
+function mergePack(p: Paths, existing: Sticker[]): Sticker[] {
+  const marker = path.join(p.stickers, ".pack-v1");
+  const dir = packDir();
+  if (fs.existsSync(marker) || !fs.existsSync(path.join(dir, "pack.json"))) return existing;
+  const pack = readJson<StickerPack>(path.join(dir, "pack.json"), {});
+  const items = pack.items ?? [];
+  if (!items.length) return existing;
+  const next = existing.slice();
+  for (const item of items) {
+    const src = path.join(dir, item.file);
+    const dest = path.join(p.stickers, item.file);
+    if (fs.existsSync(src) && !fs.existsSync(dest)) {
+      try {
+        fs.copyFileSync(src, dest);
+      } catch {
+        continue;
+      }
+    }
+    if (!next.some((s) => s.name === item.name)) {
+      next.push({
+        name: item.name,
+        file: item.file,
+        desc: item.desc,
+        scene: item.scene,
+        addedAt: 0,
+      });
+    }
+  }
+  writeJson(indexFile(p), next);
+  fs.writeFileSync(marker, "1\n");
+  return next;
+}
+
 export function ensureStickers(p: Paths): Sticker[] {
   const file = indexFile(p);
-  const existing = readJson<Sticker[]>(file, []);
+  let existing = readJson<Sticker[]>(file, []);
   if (!existing.length) {
-    writeJson(file, BUILTIN);
-    return BUILTIN;
+    existing = BUILTIN;
+    writeJson(file, existing);
   }
-  return existing;
+  return mergePack(p, existing);
 }
 
 export function listStickers(p: Paths): Sticker[] {

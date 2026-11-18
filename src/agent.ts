@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { AppConfig, ChatMessage, LLMMessage, OwnTimeState, QuoteRef, SceneKind } from "./types.js";
 import type { Paths } from "./config.js";
 import type { MemoryStore } from "./memory.js";
@@ -23,6 +25,11 @@ import type { ToolContext, OutboxItem } from "./tools.js";
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+export interface ChatImage {
+  file: string;
+  mime: string;
+}
+
 export interface AgentContext {
   config: AppConfig;
   paths: Paths;
@@ -31,7 +38,7 @@ export interface AgentContext {
 }
 
 export class ChatAgent {
-  private pending: { text: string; ts: number; quote?: QuoteRef }[] = [];
+  private pending: { text: string; ts: number; quote?: QuoteRef; image?: ChatImage }[] = [];
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private ownMode = false;
@@ -55,10 +62,10 @@ export class ChatAgent {
     this.ctx = ctx;
   }
 
-  enqueue(text: string, ts = Date.now(), quote?: QuoteRef): void {
+  enqueue(text: string, ts = Date.now(), quote?: QuoteRef, image?: ChatImage): void {
     const clean = text.trim();
-    if (!clean) return;
-    this.pending.push({ text: clean, ts, quote });
+    if (!clean && !image) return;
+    this.pending.push({ text: clean || "（发来一张图片）", ts, quote, image });
     if (this.running && this.ownMode) {
       this.abort?.abort();
       return;
@@ -105,7 +112,8 @@ export class ChatAgent {
     const firstTs = batch[0]?.ts ?? Date.now();
     const text = batch.map((item) => item.text).join("\n");
     const quote = batch.find((item) => item.quote)?.quote;
-    await this.runTurn(text, firstTs, false, quote);
+    const image = batch.find((item) => item.image)?.image;
+    await this.runTurn(text, firstTs, false, quote, image);
     if (this.pending.length && !this.running) this.arm(300);
   }
 
@@ -116,7 +124,13 @@ export class ChatAgent {
     return this.sentInTurn;
   }
 
-  private async runTurn(text: string, firstTs: number, proactive: boolean, quote?: QuoteRef): Promise<void> {
+  private async runTurn(
+    text: string,
+    firstTs: number,
+    proactive: boolean,
+    quote?: QuoteRef,
+    image?: ChatImage,
+  ): Promise<void> {
     const { config, paths, memory } = this.ctx;
     const turnId = `turn-${Date.now().toString(36)}-${++this.turnSeq}`;
     this.running = true;
@@ -149,7 +163,7 @@ export class ChatAgent {
       const todaySummary = timelineSummary(paths, config, day);
       const recalls = memory.recall(text, 3);
       const justRemembered = memory.recentInbox(4);
-      const stickers = ensureStickers(paths).slice(0, 6);
+      const stickers = ensureStickers(paths);
 
       const system = buildSystem({
         config,
@@ -181,10 +195,21 @@ export class ChatAgent {
       const body = proactive
         ? `<内心>\n${text}\n</内心>`
         : `${quote ? `${quoteLine(quote, config)}\n` : ""}${config.ownerTitle}：${text}`;
+      let userContent: LLMMessage["content"] = `${nowBlock}\n\n${body}`;
+      if (image && !proactive) {
+        const file = path.join(paths.media, path.basename(image.file));
+        if (fs.existsSync(file)) {
+          const base64 = fs.readFileSync(file).toString("base64");
+          userContent = [
+            { type: "text", text: `${nowBlock}\n\n${body}` },
+            { type: "image_url", image_url: { url: `data:${image.mime};base64,${base64}` } },
+          ];
+        }
+      }
       const messages: LLMMessage[] = [
         { role: "system", content: system },
         ...history,
-        { role: "user", content: `${nowBlock}\n\n${body}` },
+        { role: "user", content: userContent },
       ];
 
       ensureSession(paths, config);

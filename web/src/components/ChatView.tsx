@@ -1,14 +1,18 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { CheckCheck, Feather, Quote, Send, Sparkles, X } from "lucide-react";
+import { CheckCheck, Feather, ImagePlus, LoaderCircle, Quote, Send, Sparkles, X } from "lucide-react";
 import type { ChatMessage, QuoteRef, Status } from "../types";
 import { API_BASE, formatDay, formatTime } from "../api";
+import { prepareImage, type PreparedImage } from "../image";
 import { WhaleAvatar } from "./ui";
 
 function MiniAvatar() {
   return (
-    <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#6f968e] to-[#3f5f59] text-[13px] shadow-sm ring-1 ring-white/40">
-      🐋
-    </div>
+    <img
+      src="/avatar.png"
+      alt=""
+      draggable={false}
+      className="mt-0.5 h-7 w-7 shrink-0 rounded-full bg-white/40 object-cover shadow-sm ring-1 ring-white/40"
+    />
   );
 }
 
@@ -24,7 +28,8 @@ function DayDivider({ day }: { day: string }) {
 
 function QuoteBlock({ quote }: { quote: QuoteRef }) {
   const who = quote.role === "user" ? "你" : "鲸鲸";
-  const body = quote.kind === "sticker" ? `[表情] ${quote.text}` : quote.text;
+  const body =
+    quote.kind === "sticker" ? `[表情] ${quote.text}` : quote.kind === "image" ? "[图片]" : quote.text;
   return (
     <button
       type="button"
@@ -52,6 +57,42 @@ function MessageRow({
   const proactive = Boolean(message.meta?.proactive);
 
   if (message.kind === "silent") return null;
+
+  if (message.role === "user" && message.kind === "image") {
+    const file = String(message.meta?.file ?? "");
+    return (
+      <div id={`msg-${message.id}`} className="fade-up group flex justify-end">
+        <div className="min-w-0 max-w-[82%]">
+          {message.quote ? <QuoteBlock quote={message.quote} /> : null}
+          <img
+            src={`${API_BASE}/media/${file.replace(/^\/+/, "")}`}
+            alt="你发来的图片"
+            className="ml-auto max-h-72 max-w-full rounded-2xl border border-line/60 object-cover shadow-sm"
+          />
+          {message.text && message.text !== "（发来一张图片）" ? (
+            <div className="bubble-me mt-1.5">{message.text}</div>
+          ) : null}
+          <div className="mt-1 flex items-center justify-end gap-1.5 pr-1 text-[10px] text-ink-faint">
+            <button
+              type="button"
+              onClick={() => onQuote(message)}
+              className="inline-flex items-center gap-0.5 text-[9.5px] opacity-0 transition hover:text-coral group-hover:opacity-100"
+            >
+              <Quote className="h-2.5 w-2.5" />
+              引用
+            </button>
+            <span>{formatTime(message.ts)}</span>
+            {showRead && readAt && readAt >= message.ts ? (
+              <span className="inline-flex items-center gap-0.5 text-sea/80">
+                <CheckCheck className="h-3 w-3" />
+                已读
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (message.role === "user") {
     return (
@@ -83,13 +124,22 @@ function MessageRow({
 
   if (message.kind === "sticker") {
     const emoji = String(message.meta?.emoji ?? "🫧");
+    const file = String(message.meta?.file ?? "");
     return (
       <div id={`msg-${message.id}`} className="fade-up flex items-start gap-2.5">
         <MiniAvatar />
         <div>
-          <div className="grid h-20 w-20 place-items-center rounded-[20px] border border-line/60 bg-white/55 text-4xl shadow-sm">
-            {emoji}
-          </div>
+          {file ? (
+            <img
+              src={`${API_BASE}/stickers/${encodeURIComponent(file.replace(/^\/+/, ""))}`}
+              alt={message.text}
+              className="max-h-44 max-w-[180px] rounded-[20px] border border-line/60 bg-white/55 shadow-sm"
+            />
+          ) : (
+            <div className="grid h-20 w-20 place-items-center rounded-[20px] border border-line/60 bg-white/55 text-4xl shadow-sm">
+              {emoji}
+            </div>
+          )}
           <div className="mt-1 pl-1 text-[10px] text-ink-faint">{message.text}</div>
         </div>
       </div>
@@ -207,12 +257,16 @@ export function ChatView({
   messages: ChatMessage[];
   typing: boolean;
   readAt: number | null;
-  onSend: (text: string, quote?: ChatMessage) => Promise<void>;
+  onSend: (text: string, quote?: ChatMessage, image?: string) => Promise<void>;
   onNavigateSettings: () => void;
 }) {
   const [text, setText] = useState("");
   const [quote, setQuote] = useState<ChatMessage | null>(null);
+  const [image, setImage] = useState<PreparedImage | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -251,18 +305,34 @@ export function ChatView({
 
   async function submit(value?: string) {
     const content = (value ?? text).trim();
-    if (!content || sending) return;
+    if ((!content && !image) || sending || preparing) return;
     setSending(true);
     try {
-      await onSend(content, quote ?? undefined);
+      await onSend(content, quote ?? undefined, image?.dataUrl);
       setText("");
       setQuote(null);
+      setImage(null);
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
         textareaRef.current.focus();
       }
     } finally {
       setSending(false);
+    }
+  }
+
+  async function attach(file: File | undefined) {
+    if (!file || preparing) return;
+    setPreparing(true);
+    setImageError(null);
+    try {
+      setImage(await prepareImage(file));
+      setImageError(null);
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : "这张图处理不了。");
+    } finally {
+      setPreparing(false);
+      if (fileRef.current) fileRef.current.value = "";
     }
   }
 
@@ -365,6 +435,30 @@ export function ChatView({
 
       <div className="border-t border-line/55 bg-[rgba(247,240,230,0.55)] px-4 pb-4 pt-3 backdrop-blur-md sm:px-7">
         <div className="mx-auto w-full max-w-[780px]">
+          {image ? (
+            <div className="mb-2 flex items-center gap-2.5 rounded-xl border border-line/70 bg-white/50 p-2">
+              <img src={image.dataUrl} alt="" className="h-12 w-12 rounded-lg object-cover" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[11px] text-ink-soft">{image.name}</div>
+                <div className="text-[9.5px] text-ink-faint">
+                  {image.width}×{image.height} · 会一起发给她
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setImage(null)}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-ink-faint transition hover:bg-white/70 hover:text-coral"
+                title="取消图片"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ) : null}
+          {imageError ? (
+            <div className="mb-2 rounded-lg border border-coral/25 bg-coral/5 px-3 py-1.5 text-[10px] text-coral-deep">
+              {imageError}
+            </div>
+          ) : null}
           {quote ? (
             <div className="mb-2 flex items-start gap-2 rounded-xl border border-coral/25 bg-coral/5 px-3 py-2">
               <Quote className="mt-0.5 h-3 w-3 shrink-0 text-coral/70" />
@@ -386,7 +480,24 @@ export function ChatView({
               </button>
             </div>
           ) : null}
-          <div className="flex items-end gap-2 rounded-[20px] border border-line/80 bg-[rgba(255,252,247,0.82)] p-1.5 pl-4 shadow-[0_8px_26px_rgba(82,61,42,.05)] transition focus-within:border-coral/40 focus-within:shadow-[0_0_0_3px_rgba(207,114,87,.08)]">
+          <div className="flex items-end gap-2 rounded-[20px] border border-line/80 bg-[rgba(255,252,247,0.82)] p-1.5 pl-2 shadow-[0_8px_26px_rgba(82,61,42,.05)] transition focus-within:border-coral/40 focus-within:shadow-[0_0_0_3px_rgba(207,114,87,.08)]">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => void attach(event.target.files?.[0])}
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={preparing || sending}
+              className="mb-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-faint transition hover:bg-white/70 hover:text-coral disabled:opacity-40"
+              title="发一张图片"
+              aria-label="发一张图片"
+            >
+              {preparing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+            </button>
             <textarea
               ref={textareaRef}
               value={text}
@@ -413,7 +524,7 @@ export function ChatView({
             <button
               type="button"
               onClick={() => void submit()}
-              disabled={!text.trim() || sending}
+              disabled={(!text.trim() && !image) || sending || preparing}
               className="mb-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-coral text-white shadow-sm transition hover:bg-coral-deep disabled:cursor-default disabled:bg-line disabled:text-ink-faint"
               aria-label="发送"
             >

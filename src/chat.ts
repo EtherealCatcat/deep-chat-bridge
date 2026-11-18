@@ -72,16 +72,27 @@ export function lastAssistantMessageAt(p: Paths, config: AppConfig): number {
 export function quoteLine(quote: QuoteRef, config?: AppConfig): string {
   const who = quote.role === "user" ? config?.ownerTitle ?? "主人" : config?.name ?? "鲸鲸";
   const time = formatClock(quote.ts, config?.behavior.timezone ?? "Asia/Shanghai");
-  const text = quote.text.replace(/\s+/g, " ").trim().slice(0, 160);
+  const raw =
+    quote.kind === "image"
+      ? "[图片]"
+      : quote.kind === "sticker"
+        ? `[表情] ${quote.text}`
+        : quote.text;
+  const text = raw.replace(/\s+/g, " ").trim().slice(0, 160);
   return `（引用 ${who} ${time}：${text || "……"}）`;
 }
 
 export function toLLMHistory(messages: ChatMessage[], max: number, config?: AppConfig): LLMMessage[] {
   const visible = messages
-    .filter((m) => m.kind === "text" || m.kind === "sticker")
+    .filter((m) => m.kind === "text" || m.kind === "sticker" || m.kind === "image")
     .slice(-max)
     .map<LLMMessage>((m) => {
-      const body = m.kind === "sticker" ? `[表情:${m.text}]` : m.text;
+      const body =
+        m.kind === "sticker"
+          ? `[表情:${m.text}]`
+          : m.kind === "image"
+            ? `[图片${m.text && m.text !== "（发来一张图片）" ? `：${m.text}` : ""}]`
+            : m.text;
       return {
         role: m.role,
         content: m.quote ? `${quoteLine(m.quote, config)}\n${body}` : body,

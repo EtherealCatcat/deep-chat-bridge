@@ -1,0 +1,24 @@
+{
+  "name": "大肥鱼日常",
+  "attribution": "蓝色大肥鱼档案馆 · https://fisharchive.cc/gallery · CC BY-NC-SA 4.0 · 原作：上善无形 · 女仆鲸鱼娘设计：ZipZipPipe",
+  "items": [
+    { "name": "打招呼", "file": "hello.webp", "desc": "举起手打招呼，适合刚见面或叫人", "scene": "打招呼、来了、早上好" },
+    { "name": "笑一个", "file": "happy.webp", "desc": "咧开嘴笑得很开心", "scene": "开心、被逗笑、夸奖" },
+    { "name": "眨眼", "file": "wink.webp", "desc": "眨眼比耶，有点俏皮", "scene": "调侃、卖萌、答应" },
+    { "name": "害羞鱼", "file": "shy.webp", "desc": "捂着脸害羞", "scene": "被夸、害羞、不好意思" },
+    { "name": "鼓腮", "file": "pout.webp", "desc": "鼓着腮帮子，有点小情绪", "scene": "不高兴、撒娇、哼" },
+    { "name": "生气鱼", "file": "angry.webp", "desc": "叉腰鼓腮，气鼓鼓", "scene": "生气、抗议、被惹到" },
+    { "name": "大哭", "file": "sad.webp", "desc": "放声大哭", "scene": "难过、委屈、破防" },
+    { "name": "委屈", "file": "wronged.webp", "desc": "趴在地上委屈巴巴", "scene": "委屈、求安慰、被冷落" },
+    { "name": "困困鱼", "file": "sleepy.webp", "desc": "抱着小鲸鱼睡着了", "scene": "困、晚安、不想动" },
+    { "name": "问号鱼", "file": "confused.webp", "desc": "头顶冒问号，没听懂", "scene": "疑惑、没懂、反问" },
+    { "name": "无语鱼", "file": "speechless.webp", "desc": "撇着嘴，已读不想回", "scene": "无语、懒得理、已读不回" },
+    { "name": "得意", "file": "proud.webp", "desc": "挑眉，一副拿捏了的样子", "scene": "得意、赢了、逗人" },
+    { "name": "震惊", "file": "shock.webp", "desc": "震惊到张大嘴", "scene": "惊讶、没想到、被吓到" },
+    { "name": "干饭", "file": "eat.webp", "desc": "捧着碗认真干饭", "scene": "吃饭、饿了、饭点" },
+    { "name": "摸鱼", "file": "slack.webp", "desc": "瘫着摸鱼，什么都不想干", "scene": "摸鱼、偷懒、不想上班" },
+    { "name": "加油", "file": "cheer.webp", "desc": "举手给你打气", "scene": "加油、鼓励、陪你" },
+    { "name": "拒绝", "file": "no.webp", "desc": "伸手比出拒绝", "scene": "拒绝、不要、不行" },
+    { "name": "托腮", "file": "heart.webp", "desc": "双手托腮，安静看着你", "scene": "托腮、看着你、发呆" }
+  ]
+}

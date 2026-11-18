@@ -8,9 +8,13 @@ export interface ToolCall {
   function: { name: string; arguments: string };
 }
 
+export type LLMContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export interface LLMMessage {
   role: Role;
-  content: string;
+  content: string | LLMContentPart[];
   name?: string;
   tool_calls?: ToolCall[];
   tool_call_id?: string;

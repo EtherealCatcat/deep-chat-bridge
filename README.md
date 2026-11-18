@@ -147,8 +147,8 @@ DeepSeek 的高峰时段是**北京时间工作日 09:00–12:00、14:00–18:00
 - 输入框左侧的图片按钮可以发图；浏览器会先把图压到最长边 1280、JPEG 0.84，服务端再限制 8MB。
 - 图片只用于当前这一轮：她看到的是原图；历史里只保留「[图片]」和当时的话，避免每轮重发。
 - 需要 `deepseek-flash` 或支持 `image_url` 的 OpenAI 兼容模型；`deepseek-v4-pro` 也支持。
-- 18 张大肥鱼表情在 `assets/stickers/`，首次启动会复制到 `~/.chatbridge/stickers/`，并合并进 `index.json`。
-- 表情来源：**蓝色大肥鱼档案馆**（<https://fisharchive.cc/gallery>），CC BY-NC-SA 4.0，非商业；原作上善无形，女仆鲸鱼娘设计 ZipZipPipe。头像由 `happy.webp` 裁切而来。
+- 100 张大肥鱼静态表情在 `assets/stickers/`（512 PNG 转为 WebP），首次启动会复制到 `~/.chatbridge/stickers/`，并合并进 `index.json`。
+- 表情来源：用户提供的 **大肥鱼日常表情包 v004**（2026-10-25）；基础鲸鱼娘上善无形，DeepSeek 女仆设计 ZipZipPipe，本套 ming。CC BY-NC-SA 4.0，非商业；只使用静态图，不使用 GIF。头像由大肥鱼 Q 版立绘裁切而来。
 - 想换头像：替换 `web/public/avatar.png` 后重新 `npm run build:web`；想加表情：把 webp 放进 `assets/stickers/` 并在 `pack.json` 里加一条，或直接改 `~/.chatbridge/stickers/index.json`。
 
 ## 常用命令
@@ -185,4 +185,4 @@ npm run tauri:dev     # Tauri 原生窗口
 
 灵感来自 [dsh-jingjing](https://github.com/XiangXiaoYuan5254/dsh-jingjing)（MIT）。这个项目没有复用它的代码，只借了「人设 + 此刻 + 记忆 + 生活」这套结构，并把 QQ/NapCat/DSH 插件换成了本地 Web + Tauri。
 
-形象与表情来自 [蓝色大肥鱼档案馆](https://fisharchive.cc/gallery)，CC BY-NC-SA 4.0，非商业使用；原作上善无形，女仆鲸鱼娘设计 ZipZipPipe。
+形象与表情来自大肥鱼 Q 版素材与用户提供的 **大肥鱼日常表情包 v004**，CC BY-NC-SA 4.0，非商业使用；基础鲸鱼娘上善无形，女仆鲸鱼娘设计 ZipZipPipe，本套 ming。

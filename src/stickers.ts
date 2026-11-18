@@ -4,18 +4,12 @@ import type { Paths } from "./config.js";
 import type { Sticker } from "./types.js";
 import { readJson, writeJson, listFiles } from "./store.js";
 
-const BUILTIN: Sticker[] = [
-  { name: "开心", emoji: "😊", desc: "弯着眼睛笑", scene: "开心、被夸", addedAt: 0 },
-  { name: "好耶", emoji: "🎉", desc: "小小的庆祝", scene: "好消息", addedAt: 0 },
-  { name: "难过", emoji: "🥺", desc: "眼睛湿漉漉的", scene: "委屈、难过", addedAt: 0 },
-  { name: "困", emoji: "😴", desc: "眼皮快合上了", scene: "困、想睡", addedAt: 0 },
-  { name: "无语", emoji: "😑", desc: "一时不知道说什么", scene: "无语、被逗到", addedAt: 0 },
-  { name: "贴贴", emoji: "🫂", desc: "想靠近一点", scene: "想念、安慰", addedAt: 0 },
-  { name: "生气", emoji: "😤", desc: "鼓着脸", scene: "吃醋、被惹到", addedAt: 0 },
-  { name: "问号", emoji: "❓", desc: "缓缓打出一个问号", scene: "没听懂", addedAt: 0 },
-  { name: "害羞", emoji: "😳", desc: "耳朵有点红", scene: "被夸、不好意思", addedAt: 0 },
-  { name: "哼", emoji: "😾", desc: "嘴硬", scene: "闹小脾气", addedAt: 0 },
-];
+const OLD_PACK_FILES = new Set([
+  "hello.webp", "happy.webp", "wink.webp", "shy.webp", "pout.webp",
+  "angry.webp", "sad.webp", "wronged.webp", "sleepy.webp", "confused.webp",
+  "speechless.webp", "proud.webp", "shock.webp", "eat.webp", "slack.webp",
+  "cheer.webp", "no.webp", "heart.webp",
+]);
 
 interface StickerPack {
   name?: string;
@@ -32,17 +26,21 @@ function packDir(): string {
 }
 
 function mergePack(p: Paths, existing: Sticker[]): Sticker[] {
-  const marker = path.join(p.stickers, ".pack-v1");
+  const marker = path.join(p.stickers, ".pack-v2");
   const dir = packDir();
   if (fs.existsSync(marker) || !fs.existsSync(path.join(dir, "pack.json"))) return existing;
   const pack = readJson<StickerPack>(path.join(dir, "pack.json"), {});
   const items = pack.items ?? [];
   if (!items.length) return existing;
-  const next = existing.slice();
+
+  // v2 replaces the old v1 image pack and the built-in emoji set. Keep
+  // stickers the owner added by hand (addedAt != 0 and backed by a file).
+  const next = existing.filter((s) => s.addedAt !== 0 && Boolean(s.file));
+
   for (const item of items) {
     const src = path.join(dir, item.file);
     const dest = path.join(p.stickers, item.file);
-    if (fs.existsSync(src) && !fs.existsSync(dest)) {
+    if (fs.existsSync(src)) {
       try {
         fs.copyFileSync(src, dest);
       } catch {
@@ -59,18 +57,27 @@ function mergePack(p: Paths, existing: Sticker[]): Sticker[] {
       });
     }
   }
+
   writeJson(indexFile(p), next);
-  fs.writeFileSync(marker, "1\n");
+  fs.writeFileSync(marker, "2\n");
+  try {
+    fs.unlinkSync(path.join(p.stickers, ".pack-v1"));
+  } catch {
+    // no v1 marker
+  }
+  for (const old of OLD_PACK_FILES) {
+    if (next.some((s) => s.file === old)) continue;
+    try {
+      fs.unlinkSync(path.join(p.stickers, old));
+    } catch {
+      // already gone
+    }
+  }
   return next;
 }
 
 export function ensureStickers(p: Paths): Sticker[] {
-  const file = indexFile(p);
-  let existing = readJson<Sticker[]>(file, []);
-  if (!existing.length) {
-    existing = BUILTIN;
-    writeJson(file, existing);
-  }
+  const existing = readJson<Sticker[]>(indexFile(p), []);
   return mergePack(p, existing);
 }
 

@@ -41,12 +41,12 @@ function QuoteBlock({ quote }: { quote: QuoteRef }) {
 function MessageRow({
   message,
   readAt,
-  lastAssistant,
+  showRead,
   onQuote,
 }: {
   message: ChatMessage;
   readAt: number | null;
-  lastAssistant: boolean;
+  showRead: boolean;
   onQuote: (message: ChatMessage) => void;
 }) {
   const proactive = Boolean(message.meta?.proactive);
@@ -69,6 +69,12 @@ function MessageRow({
               引用
             </button>
             <span>{formatTime(message.ts)}</span>
+            {showRead && readAt && readAt >= message.ts ? (
+              <span className="inline-flex items-center gap-0.5 text-sea/80">
+                <CheckCheck className="h-3 w-3" />
+                已读
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
@@ -147,7 +153,7 @@ function MessageRow({
             <Quote className="h-2.5 w-2.5" />
             引用
           </button>
-          {lastAssistant && readAt && readAt >= message.ts ? (
+          {showRead && readAt && readAt >= message.ts ? (
             <span className="inline-flex items-center gap-0.5 text-sea/80">
               <CheckCheck className="h-3 w-3" />
               已读
@@ -212,7 +218,12 @@ export function ChatView({
   const stick = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
+  const lastMessage = messages[messages.length - 1];
+  const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
+  const readReceiptId =
+    lastMessage?.role === "assistant" && lastMessage.kind !== "silent"
+      ? lastMessage.id
+      : lastUserMessage?.id;
 
   useEffect(() => {
     if (quote && !messages.some((m) => m.id === quote.id)) setQuote(null);
@@ -338,7 +349,7 @@ export function ChatView({
               <MessageRow
                 message={message}
                 readAt={readAt}
-                lastAssistant={message.id === lastAssistantId}
+                showRead={message.id === readReceiptId}
                 onQuote={(target) => {
                   setQuote(target);
                   textareaRef.current?.focus();

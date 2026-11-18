@@ -17,7 +17,7 @@ import { addReminder, cancelReminder, loadReminders, markReminderDone, parseDue 
 import { listDiaries, readDiary, yesterdayKey } from "./diaryStore.js";
 import { writeDiary, diaryTarget } from "./diary.js";
 import { consolidateMemory, hasInbox } from "./consolidate.js";
-import { appendTimeline, readTimeline } from "./timeline.js";
+import { appendTimeline, readTimeline, readTimelineForDisplay } from "./timeline.js";
 import { loadDeferred, loadLife } from "./life.js";
 import { todayUsage } from "./usage.js";
 import { MODEL_PRICES, costPolicy, peakInfo } from "./pricing.js";
@@ -286,7 +286,7 @@ app.post("/api/diary/write", async (request) => {
 app.get("/api/timeline", async (request) => {
   const query = request.query as { day?: string };
   const day = query.day && /^\d{4}-\d{2}-\d{2}$/.test(query.day) ? query.day : dayKey(Date.now(), config.behavior.rotateHour, config.behavior.timezone);
-  return { day, events: readTimeline(p, day), heading: `${day} · ${weekdayCN(day)}` };
+  return { day, events: readTimelineForDisplay(p, config, day), heading: `${day} · ${weekdayCN(day)}` };
 });
 
 app.get("/api/reminders", async () => ({ reminders: loadReminders(p).filter((r) => r.status === "pending") }));

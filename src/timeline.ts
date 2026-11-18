@@ -20,6 +20,52 @@ export function readTimeline(p: Paths, day: string): TimelineEvent[] {
   return readJsonl<TimelineEvent>(timelineFile(p, day));
 }
 
+const HIDDEN_KINDS = new Set(["resume_gap"]);
+const CHAT_GROUP_GAP = 30 * 60_000;
+
+function chatChars(events: TimelineEvent[]): number {
+  return events.reduce((sum, event) => {
+    const fromMeta = event.meta?.chars;
+    if (typeof fromMeta === "number" && Number.isFinite(fromMeta)) {
+      return sum + Math.max(0, fromMeta);
+    }
+    const match = /(\d+)\s*字/.exec(event.text);
+    return sum + (match ? Number(match[1]) : 0);
+  }, 0);
+}
+
+export function groupTimelineEvents(events: TimelineEvent[], config: AppConfig): TimelineEvent[] {
+  const result: TimelineEvent[] = [];
+  let group: TimelineEvent[] = [];
+
+  const flush = () => {
+    if (!group.length) return;
+    const turns = group.length;
+    const chars = chatChars(group);
+    const last = group[group.length - 1];
+    const text = `和${config.ownerTitle}聊了 ${turns} 轮${chars > 0 ? `，约 ${chars} 字` : ""}`;
+    result.push({ ts: last.ts, kind: "chat", text });
+    group = [];
+  };
+
+  for (const event of events) {
+    if (HIDDEN_KINDS.has(event.kind)) continue;
+    if (event.kind === "chat") {
+      if (group.length && event.ts - group[group.length - 1].ts > CHAT_GROUP_GAP) flush();
+      group.push(event);
+      continue;
+    }
+    flush();
+    result.push(event);
+  }
+  flush();
+  return result;
+}
+
+export function readTimelineForDisplay(p: Paths, config: AppConfig, day: string): TimelineEvent[] {
+  return groupTimelineEvents(readTimeline(p, day), config);
+}
+
 const LABELS: Record<string, string> = {
   chat: "聊天",
   tell: "主动说话",
@@ -40,7 +86,7 @@ const LABELS: Record<string, string> = {
 };
 
 export function timelineSummary(p: Paths, config: AppConfig, day: string, limit = 14): string {
-  const events = readTimeline(p, day);
+  const events = readTimelineForDisplay(p, config, day);
   if (!events.length) return "今天还没发生什么。";
   const lines = events.slice(-limit).map((event) => {
     const label = LABELS[event.kind] ?? event.kind;
@@ -50,7 +96,7 @@ export function timelineSummary(p: Paths, config: AppConfig, day: string, limit 
 }
 
 export function timelineForPrompt(p: Paths, config: AppConfig, day: string): string {
-  const events = readTimeline(p, day);
+  const events = readTimelineForDisplay(p, config, day);
   if (!events.length) return "（今天还很安静。）";
   return events
     .slice(-24)

@@ -266,7 +266,7 @@ export class ChatAgent {
       appendTimeline(paths, config, {
         kind: proactive ? "speak" : "chat",
         text: proactive ? "主动找主人说话" : `和${config.ownerTitle}聊了 ${text.length} 字`,
-        meta: { proactive, bubbles: bubbles.length },
+        meta: { proactive, bubbles: bubbles.length, turns: 1, chars: text.length },
       });
       this.emit({
         type: "timeline",

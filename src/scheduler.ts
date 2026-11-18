@@ -13,7 +13,7 @@ import { dueReminders, markReminderDone } from "./care.js";
 import { diaryTarget, writeDiary } from "./diary.js";
 import { consolidateMemory, hasInbox } from "./consolidate.js";
 import { lastAssistantMessageAt, lastOwnerMessageAt, todayProactiveCount } from "./chat.js";
-import { dayKey, formatClock, humanDuration, humanGap, zonedParts } from "./time.js";
+import { dayKey, formatClock, humanGap, zonedParts } from "./time.js";
 import { appendTimeline } from "./timeline.js";
 import {
   canShareNow,
@@ -84,7 +84,7 @@ export class Scheduler {
     const gap = life.lastTick ? now - life.lastTick : 0;
 
     if (gap > 3 * 60_000 && life.lastTick > 0) {
-      appendTimeline(paths, config, { kind: "resume_gap", text: `电脑睡了 ${humanDuration(gap)}` });
+      // Diagnostic only; wake gaps are noisy in the day view and are not life events.
       life.lastResumeGapAt = now;
     }
     life.lastTick = now;

@@ -1,10 +1,10 @@
-# chatBridge · 鲸鲸的房间
+# DeepHome · 鲸鲸的房间
 
-一个住在你 Mac 里的本地伴侣。不是助手，不接 QQ，也不依赖 DSH 插件。
+一个住在你 Mac 里的本地伴侣。不是助手，不接 QQ，也不依赖 DSH 插件。项目名仍是 **chatBridge**，打包后的桌面应用叫 **DeepHome**。
 
 她现在会聊天、有自己的心情和作息、会主动找你、会记东西、会写日记；所有数据都在本地文件里，你可以随时打开看、改、备份。
 
-> 当前是 **P0–P4** 版本：能聊天、有生活、有记忆，也有自己的时间。P5「打包/开机自启」还没做。
+> 当前是 **P0–P5** 版本：能聊天、有生活、有记忆、有自己的时间，也能打包成 Mac 应用双击打开。
 
 ---
 
@@ -24,9 +24,9 @@
 
 ## 环境
 
-- macOS（Apple Silicon 或 Intel）
-- Node.js **24+**
-- 可选：Rust 1.90+（只有构建 Tauri 原生窗口时需要）
+- macOS 12+；当前打包产物只带 Apple Silicon 的 Node，Intel 需要自己换 sidecar 二进制
+- Node.js **24+**（源码运行 / 构建）
+- 可选：Rust 1.90+ 与 Xcode（只有构建 Tauri 应用时需要）
 - 一个 DeepSeek API Key（或其他 OpenAI 兼容服务）
 
 ## 快速开始
@@ -57,27 +57,57 @@ npm start
 
 首次启动会生成 `config.json`（权限 600）、`persona.md`、记忆种子、内置表情和空目录。
 
-## Tauri 原生窗口
+## 双击使用（P5）
+
+构建一个自带 sidecar 的 macOS 应用：
 
 ```bash
-# 需要 cargo 在 PATH 里
+export PATH="$HOME/.cargo/bin:$PATH"
+npm run build:p5          # Web + 服务端单文件 + Node / 贴纸资源
+npm run tauri:build:p5    # .app + .dmg
+```
+
+产物：
+
+```
+src-tauri/target/release/bundle/macos/DeepHome.app
+src-tauri/target/release/bundle/dmg/DeepHome_0.1.0_aarch64.dmg
+```
+
+应用启动时会：
+
+- 随机选一个 `127.0.0.1` 空闲端口，拉起内置的 Node sidecar；前端通过 Tauri command 获取端口，不写死 7788。
+- 同一时间只允许一个实例；再次双击会聚焦已有窗口。
+- 退出应用时结束 sidecar；日志在 `~/Library/Logs/DeepHome/server.log`。
+- 数据固定用 `~/.chatbridge/`；如果之前用 `./data` 开发，先备份再复制过去：
+
+```bash
+cp -R ~/.chatbridge ~/.chatbridge.backup
+cp -R data/. ~/.chatbridge/
+```
+
+图标：`.app` / `.dmg` 使用 `src-tauri/icons-app/`（源图 `APPicon.webp`），开发期的 `src-tauri/icons/` 使用 `base.webp`。`web/public/avatar.png` 是聊天头像，不跟应用图标混用。
+
+**未签名分发说明**：没有加入 Apple Developer Program，`.app` / `.dmg` 是 ad-hoc 签名、未公证。小范围分发时让对方右键「打开」，或执行：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/DeepHome.app
+```
+
+首次打开会请求通知权限；设置页可以打开/关闭「登录时自动打开」。当前包只带 Apple Silicon 的 Node，Intel Mac 需要自行替换 `src-tauri/resources/node`。
+
+开发模式仍然是：
+
+```bash
 export PATH="$HOME/.cargo/bin:$PATH"
 npm run tauri:dev
 ```
 
 `tauri dev` 会执行 `npm run dev`（同时起服务端和 Vite），窗口加载 `http://127.0.0.1:5173`。
 
-构建：
-
-```bash
-npm run tauri:build
-```
-
-**注意**：当前 Tauri 只负责原生窗口，服务端仍由 `npm start` / launchd 启动；P5 才会把服务端打成 sidecar，做到双击即用。
-
 ## 数据在哪
 
-默认 `~/.chatbridge/`，开发时 `CHATBRIDGE_HOME=./data`：
+默认 `~/.chatbridge/`，开发时可用 `CHATBRIDGE_HOME=./data`；打包应用固定使用 `~/.chatbridge/`：
 
 ```
 ~/.chatbridge/
@@ -158,14 +188,24 @@ DeepSeek 的高峰时段是**北京时间工作日 09:00–12:00、14:00–18:00
 - 表情来源：用户提供的 **大肥鱼日常表情包 v004**（2026-10-25）；基础鲸鱼娘上善无形，DeepSeek 女仆设计 ZipZipPipe，本套 ming。CC BY-NC-SA 4.0，非商业；只使用静态图，不使用 GIF。头像由大肥鱼 Q 版立绘裁切而来。
 - 想换头像：替换 `web/public/avatar.png` 后重新 `npm run build:web`；想加表情：把 webp 放进 `assets/stickers/` 并在 `pack.json` 里加一条，或直接改 `~/.chatbridge/stickers/index.json`。
 
+## 开机自启、通知与日志（P5）
+
+- **开机自启**：设置页「这台电脑」→「登录时自动打开」；通过 macOS LaunchAgent 注册，关掉即移除。
+- **系统通知**：应用在后台时，她发来新消息会走 macOS 通知；点通知会回到聊天页。首次启动会请求权限；如果当时点了拒绝，去「系统设置 → 通知 → DeepHome」重新打开，设置页的「测试通知」可立即验证。
+- **单实例与端口**：重复打开只聚焦原窗口；sidecar 用随机回环端口，避免 7788 被占用。
+- **日志**：`~/Library/Logs/DeepHome/server.log`，设置页和调试页都有打开入口。
+- **合盖/唤醒**：sidecar 随系统睡眠暂停，唤醒后调度器按 `resume_gap` 补偿；不会补发错过的主动消息。
+
 ## 常用命令
 
 ```bash
 npm run typecheck     # 服务端 + Web
 npm test              # Vitest
 npm run build         # 服务端 tsc + Web Vite
+npm run build:p5      # Web + sidecar 单文件 + 资源
 npm run dev           # 服务端 + Web 热更新
 npm run tauri:dev     # Tauri 原生窗口
+npm run tauri:build:p5 # 打包 .app/.dmg（未签名）
 ```
 
 ## 更新记录
@@ -174,10 +214,10 @@ npm run tauri:dev     # Tauri 原生窗口
 
 ## 现在还没有的
 
-- P5：Tauri 打包/签名、launchd 开机自启、把服务端做成 sidecar。
+- 正式签名 / 公证：没有 Developer Program，分发给别人需要右键打开；不做自动更新。
+- Intel 打包：当前 sidecar 只带 arm64 Node；源码可以自己换。
 - B 站、小红书、QQ 空间：不做，也不打算做。
-- 语音、Live2D、手机访问：以后再说。
-- 通知：页面开着时有 toast；系统通知还没接。
+- 语音、Live2D、手机/局域网访问：本轮不做。
 
 ## 隐私
 
@@ -186,7 +226,7 @@ npm run tauri:dev     # Tauri 原生窗口
 - 出网只有：模型 API、你配置的 RSS、她主动读的网页。
 - 聊天内容会发给模型提供方（除非你换成本地 Ollama）；发图时，当前这张图会以 base64 发给模型，历史不会重发。
 - 网页内容会被包进 `<untrusted_web>`，当资料而不是指令；`web_read` 会拒绝私网地址。
-- 数据导出/删除：直接删 `~/.chatbridge/`；备份交给 Time Machine。
+- 数据导出/删除：直接删 `~/.chatbridge/`；备份交给 Time Machine。服务端 stdout/stderr 只写到 `~/Library/Logs/DeepHome/server.log`。
 
 ## 设计文档
 

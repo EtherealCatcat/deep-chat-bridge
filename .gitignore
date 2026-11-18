@@ -11,3 +11,4 @@ coverage/
 src-tauri/target/
 src-tauri/gen/
 data-test/
+src-tauri/resources/

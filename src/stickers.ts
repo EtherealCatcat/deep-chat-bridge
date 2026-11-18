@@ -22,7 +22,8 @@ function indexFile(p: Paths): string {
 }
 
 function packDir(): string {
-  return path.join(process.cwd(), "assets", "stickers");
+  const custom = process.env.CHATBRIDGE_ASSETS_DIR;
+  return custom ? path.join(custom, "stickers") : path.join(process.cwd(), "assets", "stickers");
 }
 
 function mergePack(p: Paths, existing: Sticker[]): Sticker[] {

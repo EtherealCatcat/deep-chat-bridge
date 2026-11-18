@@ -519,20 +519,20 @@ if (exists(path.join(staticRoot, "index.html"))) {
 } else {
   app.get("/", async () => ({
     ok: true,
-    message: "chatBridge API 在跑。Web UI 还没构建：开发时用 npm run dev，或先 npm run build:web。",
+    message: "DeepHome API 在跑。Web UI 还没构建：开发时用 npm run dev，或先 npm run build:web。",
     root,
   }));
 }
 
-const port = Number(config.ui.port) || 7788;
+const port = Number(process.env.CHATBRIDGE_PORT) || Number(config.ui.port) || 7788;
 try {
   await app.listen({ host: "127.0.0.1", port });
   scheduler.start();
-  console.log(`\n  chatBridge · ${config.name} 的房间`);
+  console.log(`\n  DeepHome · ${config.name} 的房间`);
   console.log(`  http://127.0.0.1:${port}`);
   console.log(`  数据：${root}\n`);
 } catch (error) {
-  console.error("chatBridge 启动失败：", error);
+  console.error("DeepHome 启动失败：", error);
   process.exit(1);
 }
 

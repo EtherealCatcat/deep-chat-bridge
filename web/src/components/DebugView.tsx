@@ -5,12 +5,14 @@ import {
   Clock,
   Cpu,
   Database,
+  FileText,
   LoaderCircle,
   RefreshCw,
   Terminal,
   Wand2,
 } from "lucide-react";
-import { api } from "../api";
+import { invoke } from "@tauri-apps/api/core";
+import { api, isTauri } from "../api";
 import type { DebugPayload } from "../types";
 import { Badge, Card, Loading, SectionTitle } from "./ui";
 
@@ -105,6 +107,16 @@ export function DebugView({ showToast }: { showToast: (text: string, kind?: "inf
               {refreshing ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               刷新
             </button>
+            {isTauri() ? (
+              <button
+                type="button"
+                onClick={() => void invoke("open_logs").catch(() => showToast("打不开日志目录。", "error"))}
+                className="btn-ghost"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                日志
+              </button>
+            ) : null}
             <button type="button" onClick={() => void consolidate()} disabled={consolidating} className="btn-primary">
               {consolidating ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
               整理记忆

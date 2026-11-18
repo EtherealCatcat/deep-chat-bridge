@@ -11,12 +11,16 @@ import {
   LoaderCircle,
   MessageCircleHeart,
   Moon,
+  Power,
   Save,
   Server,
   Settings2,
   Wallet,
 } from "lucide-react";
-import { api, clockToMin, formatTime, minToClock } from "../api";
+import { invoke } from "@tauri-apps/api/core";
+import { api, clockToMin, formatTime, isTauri, minToClock } from "../api";
+import { getAutostart, setAutostart } from "../autostart";
+import { sendTestNotification } from "../notify";
 import type { AppConfig, SettingsPayload } from "../types";
 import { Badge, Card, Labeled, Loading, SectionTitle } from "./ui";
 
@@ -93,6 +97,8 @@ export function SettingsView({ showToast }: { showToast: (text: string, kind?: "
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [autostart, setAutostartState] = useState(false);
+  const [autostartBusy, setAutostartBusy] = useState(false);
 
   async function load() {
     try {
@@ -108,6 +114,7 @@ export function SettingsView({ showToast }: { showToast: (text: string, kind?: "
 
   useEffect(() => {
     void load();
+    void getAutostart().then(setAutostartState).catch(() => undefined);
   }, []);
 
   function edit(next: AppConfig) {
@@ -138,6 +145,37 @@ export function SettingsView({ showToast }: { showToast: (text: string, kind?: "
       ...config,
       model: { ...config.model, apiKey: apiKey.trim() || config.model.apiKey },
     };
+  }
+
+  async function toggleAutostart(value: boolean) {
+    if (autostartBusy) return;
+    setAutostartBusy(true);
+    try {
+      await setAutostart(value);
+      setAutostartState(value);
+      showToast(value ? "下次登录会自动打开。" : "已取消开机自启。");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "设置开机自启失败。", "error");
+    } finally {
+      setAutostartBusy(false);
+    }
+  }
+
+  async function testNotification() {
+    try {
+      await sendTestNotification();
+      showToast("测试通知已发出。");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "通知发送失败。", "error");
+    }
+  }
+
+  async function openLogs() {
+    try {
+      await invoke("open_logs");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "打不开日志目录。", "error");
+    }
   }
 
   async function save() {
@@ -567,21 +605,60 @@ export function SettingsView({ showToast }: { showToast: (text: string, kind?: "
                 服务
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Labeled label="端口" hint="改动后重启">
-                  <input
-                    type="number"
-                    min={1024}
-                    max={65535}
-                    value={config.ui.port}
-                    onChange={(event) => patchUi({ port: Number(event.target.value) })}
-                    className="input-warm"
-                  />
-                </Labeled>
+                {isTauri() ? (
+                  <Labeled label="端口" hint="应用启动时自动选择空闲端口">
+                    <div className="input-warm text-[11px] text-ink-faint">自动分配</div>
+                  </Labeled>
+                ) : (
+                  <Labeled label="端口" hint="改动后重启">
+                    <input
+                      type="number"
+                      min={1024}
+                      max={65535}
+                      value={config.ui.port}
+                      onChange={(event) => patchUi({ port: Number(event.target.value) })}
+                      className="input-warm"
+                    />
+                  </Labeled>
+                )}
               </div>
             </div>
           </div>
         </Card>
       </div>
+
+      <Card className="mt-5 p-5 sm:p-6">
+        <div className="mb-4 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+          <Power className="h-3 w-3" />
+          这台电脑
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Toggle
+            checked={autostart}
+            onChange={(value) => void toggleAutostart(value)}
+            label="登录时自动打开"
+            hint="macOS 下次登录后，鲸鲸会自己醒来。"
+          />
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-line/50 bg-white/35 px-3 py-2.5">
+            <div>
+              <div className="text-[11.5px] text-ink">服务端日志</div>
+              <div className="mt-0.5 text-[9.5px] text-ink-faint">~/Library/Logs/DeepHome/server.log</div>
+            </div>
+            {isTauri() ? (
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button type="button" onClick={() => void testNotification()} className="btn-ghost text-[10px]">
+                  测试通知
+                </button>
+                <button type="button" onClick={() => void openLogs()} className="btn-ghost text-[10px]">
+                  打开
+                </button>
+              </div>
+            ) : (
+              <Badge>桌面应用</Badge>
+            )}
+          </div>
+        </div>
+      </Card>
 
       <details className="paper-card mt-5 p-5">
         <summary className="flex cursor-pointer list-none items-center justify-between text-[11.5px] text-ink-soft">

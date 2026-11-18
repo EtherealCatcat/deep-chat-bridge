@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, X } from "lucide-react";
 import { API_BASE, api } from "./api";
+import { initNotifications, notifyMessage } from "./notify";
 import type { ChatMessage, Page, ServerEvent, Status } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { ChatView } from "./components/ChatView";
@@ -31,8 +32,11 @@ export default function App() {
   const [toast, setToast] = useState<{ text: string; kind: ToastKind } | null>(null);
   const toastTimer = useRef<number | null>(null);
   const pageRef = useRef<Page>(page);
+  const burstRef = useRef(false);
+  const lastNotifyAt = useRef(0);
 
   pageRef.current = page;
+  burstRef.current = status?.burst ?? false;
 
   const setPage = useCallback((next: Page) => {
     setPageState(next);
@@ -59,6 +63,10 @@ export default function App() {
     } catch {
       // 已读失败不影响聊天。
     }
+  }, []);
+
+  useEffect(() => {
+    void initNotifications();
   }, []);
 
   useEffect(() => {
@@ -102,6 +110,19 @@ export default function App() {
           break;
         case "message":
           addMessage(data.message);
+          if (data.message.role === "assistant" && !burstRef.current) {
+            const now = Date.now();
+            if (now - lastNotifyAt.current > 30_000) {
+              lastNotifyAt.current = now;
+              const preview =
+                data.message.kind === "sticker"
+                  ? `[表情] ${String(data.message.meta?.emoji ?? "")}`
+                  : data.message.kind === "image"
+                    ? "[发来一张图]"
+                    : data.message.text;
+              void notifyMessage(preview);
+            }
+          }
           break;
         case "typing":
           setTyping(data.on);

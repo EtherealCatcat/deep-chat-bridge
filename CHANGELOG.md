@@ -11,9 +11,23 @@
 - **连发消息**：输入框左侧的连发按钮开启后，连续发送只落盘、不唤醒角色；点「发完了」才把整段作为一轮交给她。连发期间暂停主动消息、自己的时间和到点提醒；第一版只攒文字，图片仍按单条发送。
 - **角色侧消息引用**：模型可以在回复里写 `[引用] 原话`，服务端在最近消息中匹配并把引用挂到下一气泡；匹配不到时降级为普通文字，不编造引用。
 
+### 新增（P5）
+
+- **P5-A 双击即用**：服务端用 esbuild 打成单文件 ESM，随应用带一份 arm64 Node；Tauri 启动时选空闲回环端口拉起 sidecar，前端通过 `server_port` command 获取端口；退出时结束子进程。
+- **单实例**：`tauri-plugin-single-instance`，重复打开只聚焦已有窗口。
+- **P5-B 日常可用**：`tauri-plugin-autostart` 的登录自启（LaunchAgent）、`tauri-plugin-notification` 的后台消息通知（点击回聊天）、sidecar 日志 `~/Library/Logs/DeepHome/server.log`、设置/调试页的日志入口。
+- **打包**：`npm run build:p5` 准备 Web/服务端/Node/贴纸资源，`npm run tauri:build:p5` 产出 `DeepHome.app` 与 `DeepHome_0.1.0_aarch64.dmg`（未签名、未公证）。
+- **DeepHome 品牌**：桌面应用名改为 DeepHome，bundle identifier 改为 `com.deephome.desktop`；`.app`/`.dmg` 图标来自 `APPicon.webp`，`src-tauri/icons/` 系列图标改为 `base.webp`。
+
+### 变更
+
+- 应用数据固定 `~/.chatbridge/`；开发用的 `./data` 先备份再通过 `cp -R data/. ~/.chatbridge/` 迁移。
+- Tauri 窗口改为 setup 阶段创建：先起 sidecar、拿到端口，再建主窗口；capabilities 增加 notification/autostart。
+- `src/stickers.ts` 支持 `CHATBRIDGE_ASSETS_DIR`，`src/server.ts` 支持 `CHATBRIDGE_PORT`。
+
 ### 计划中
 
-- P5：Tauri 打包 / 签名、launchd 开机自启、服务端 sidecar，让应用可以双击即用。
+- P5-C：语音、Live2D、导入原型数据等可选能力。
 - 并行分支上的新功能；合并时在此登记。
 
 ## [0.1.0] - 2026-11-18
@@ -66,8 +80,9 @@
 
 ### 已知限制
 
-- Tauri 目前只是原生窗口，未打包 sidecar，也未做签名 / 公证。
-- 未配置 launchd，开机不会自动启动；合盖睡眠时调度器会暂停，唤醒后有补偿但不会补发错过的主动消息。
+- 未做正式签名/公证；小范围分发需右键打开或 `xattr -dr com.apple.quarantine`。
+- 当前 sidecar 只带 Apple Silicon Node；Intel 需要自行替换 `src-tauri/resources/node`。
+- 合盖睡眠时 sidecar 会暂停，唤醒后调度器补偿，但不会补发错过的主动消息。
 - 单用户、单机设计，没有账号体系或多端同步。
 - 本地 Ollama 只作为可选离线兜底，默认仍走 DeepSeek API。
 

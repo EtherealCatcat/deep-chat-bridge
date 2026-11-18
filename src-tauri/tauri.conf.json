@@ -1,43 +1,44 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "chatBridge",
+  "productName": "DeepHome",
   "version": "0.1.0",
-  "identifier": "com.chatbridge.desktop",
+  "identifier": "com.deephome.desktop",
   "build": {
     "frontendDist": "../web/dist",
     "devUrl": "http://127.0.0.1:5173",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build:web"
+    "beforeBuildCommand": "npm run build:p5"
   },
   "app": {
-    "windows": [
-      {
-        "title": "鲸鲸的房间",
-        "width": 1180,
-        "height": 780,
-        "minWidth": 900,
-        "minHeight": 620,
-        "center": true,
-        "resizable": true,
-        "fullscreen": false
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "app",
+      "dmg"
+    ],
     "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
+      "icons-app/32x32.png",
+      "icons-app/128x128.png",
+      "icons-app/128x128@2x.png",
+      "icons-app/icon.icns",
+      "icons-app/icon.ico"
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    },
+    "resources": {
+      "resources/node": "node",
+      "resources/server.mjs": "server.mjs",
+      "resources/assets": "assets"
+    },
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": "-"
     }
   }
 }

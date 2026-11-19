@@ -108,7 +108,7 @@ export interface AppConfig {
   mood: MoodConfig;
   cost: CostConfig;
   web: WebConfig;
-  ui: { port: number; trayIconStyle: "template" | "outline" | "grayscale" };
+  ui: { port: number };
 }
 
 export interface QuoteRef {

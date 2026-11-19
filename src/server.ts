@@ -488,7 +488,6 @@ app.put("/api/settings", async (request, reply) => {
   next.web.ownTimeEnabled = Boolean(next.web.ownTimeEnabled);
   if (!Array.isArray(next.web.rssFeeds)) next.web.rssFeeds = [];
   next.web.rssFeeds = next.web.rssFeeds.filter((item): item is string => typeof item === "string" && item.startsWith("http"));
-  if (!["template", "outline", "grayscale"].includes(next.ui.trayIconStyle)) next.ui.trayIconStyle = "template";
 
   saveConfig(p, next);
   config = next;

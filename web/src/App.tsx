@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, X } from "lucide-react";
 import { API_BASE, api, isTauri } from "./api";
-import { applyTrayStyle } from "./tray";
 import { initNotifications, notifyMessage } from "./notify";
 import type { ChatMessage, Page, ServerEvent, Status } from "./types";
 import { Sidebar } from "./components/Sidebar";
@@ -68,14 +67,6 @@ export default function App() {
 
   useEffect(() => {
     void initNotifications();
-  }, []);
-
-  useEffect(() => {
-    if (!isTauri()) return;
-    void api
-      .settings()
-      .then((data) => applyTrayStyle(data.config.ui.trayIconStyle))
-      .catch(() => undefined);
   }, []);
 
   useEffect(() => {

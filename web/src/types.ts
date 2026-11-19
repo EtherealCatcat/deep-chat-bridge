@@ -244,7 +244,7 @@ export interface AppConfig {
   mood: { enabled: boolean; base: number; halfLifeHours: number };
   cost: { dailyBudgetCny: number; peakPolicy: boolean };
   web: { enabled: boolean; ownTimeEnabled: boolean; rssFeeds: string[] };
-  ui: { port: number; trayIconStyle: "template" | "outline" | "grayscale" };
+  ui: { port: number };
 }
 
 export interface SettingsPayload {

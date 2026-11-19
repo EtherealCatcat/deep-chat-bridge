@@ -11,7 +11,7 @@ use tauri::{
   image::Image,
   menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem},
   tray::{TrayIcon, TrayIconBuilder},
-  AppHandle, Emitter, Manager, State, Theme, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry,
+  AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry,
 };
 
 struct ServerState {
@@ -20,64 +20,12 @@ struct ServerState {
 }
 
 struct TrayState {
-  tray: Mutex<Option<TrayIcon<Wry>>>,
+  _tray: Mutex<Option<TrayIcon<Wry>>>,
   msg_item: MenuItem<Wry>,
   own_item: MenuItem<Wry>,
-  style: Mutex<String>,
 }
 
 const TRAY_TEMPLATE: &[u8] = include_bytes!("../tray-icons/dark/template.png");
-
-fn tray_asset(style: &str, theme: Theme) -> (&'static [u8], bool) {
-  let dark = matches!(theme, Theme::Dark);
-  match style {
-    "outline" => (
-      if dark {
-        include_bytes!("../tray-icons/dark/outline.png")
-      } else {
-        include_bytes!("../tray-icons/light/outline.png")
-      },
-      false,
-    ),
-    "grayscale" => (
-      if dark {
-        include_bytes!("../tray-icons/dark/grayscale.png")
-      } else {
-        include_bytes!("../tray-icons/light/grayscale.png")
-      },
-      false,
-    ),
-    _ => (TRAY_TEMPLATE, true),
-  }
-}
-
-fn update_tray_icon(app: &AppHandle) -> Result<(), String> {
-  let state = app
-    .try_state::<TrayState>()
-    .ok_or_else(|| "tray is not ready".to_string())?;
-  let style = state
-    .style
-    .lock()
-    .map_err(|_| "tray style lock failed".to_string())?
-    .clone();
-  let theme = app
-    .get_webview_window("main")
-    .and_then(|window| window.theme().ok())
-    .unwrap_or(Theme::Dark);
-  let (bytes, template) = tray_asset(&style, theme);
-  let icon = Image::from_bytes(bytes).map_err(|error| error.to_string())?;
-  if let Some(tray) = state
-    .tray
-    .lock()
-    .map_err(|_| "tray lock failed".to_string())?
-    .as_ref()
-  {
-    tray
-      .set_icon_with_as_template(Some(icon), template)
-      .map_err(|error| error.to_string())?;
-  }
-  Ok(())
-}
 
 fn show_main(app: &AppHandle, page: Option<&str>) {
   if let Some(window) = app.get_webview_window("main") {
@@ -110,22 +58,6 @@ fn server_port(state: State<ServerState>) -> u16 {
 #[tauri::command]
 fn focus_main(app: tauri::AppHandle) {
   show_main(&app, None);
-}
-
-#[tauri::command]
-fn set_tray_style(app: AppHandle, style: String) -> Result<(), String> {
-  let style = match style.as_str() {
-    "outline" | "grayscale" => style,
-    _ => "template".to_string(),
-  };
-  if let Some(state) = app.try_state::<TrayState>() {
-    *state
-      .style
-      .lock()
-      .map_err(|_| "tray style lock failed".to_string())? = style;
-    update_tray_icon(&app)?;
-  }
-  Ok(())
 }
 
 #[tauri::command]
@@ -302,10 +234,9 @@ pub fn run() {
         .on_menu_event(|app, event| handle_menu(app, event.id().as_ref()))
         .build(app)?;
       app.manage(TrayState {
-        tray: Mutex::new(Some(tray)),
+        _tray: Mutex::new(Some(tray)),
         msg_item,
         own_item,
-        style: Mutex::new("template".to_string()),
       });
 
       let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
@@ -315,25 +246,20 @@ pub fn run() {
         .center()
         .build()?;
 
-      let app_handle = app.handle().clone();
       let window_handle = window.clone();
       window.on_window_event(move |event| {
         if let WindowEvent::CloseRequested { api, .. } = event {
           api.prevent_close();
           let _ = window_handle.hide();
-        } else if let WindowEvent::ThemeChanged(_) = event {
-          let _ = update_tray_icon(&app_handle);
         }
       });
 
-      let _ = update_tray_icon(app.handle());
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
       server_port,
       focus_main,
       open_logs,
-      set_tray_style,
       update_tray
     ])
     .build(tauri::generate_context!())

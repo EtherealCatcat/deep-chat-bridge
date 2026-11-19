@@ -34,7 +34,18 @@ const root = dataRoot();
 const p = paths(root);
 ensureLayout(p);
 
+const firstRun = !exists(p.config);
 let config = loadConfig(p);
+if (firstRun) {
+  // 首次启动：先留一个占位名字，强制用户去设置页起名；模型也留空待单独配置。
+  config.name = "某鱼";
+  config.ownerTitle = "主人";
+  config.setupPending = true;
+  config.model.model = "";
+  config.model.sideModel = "";
+  config.model.apiKey = "";
+  saveConfig(p, config);
+}
 if (!exists(p.persona)) writeText(p.persona, DEFAULT_PERSONA);
 let persona = readText(p.persona, DEFAULT_PERSONA).trim() || DEFAULT_PERSONA;
 
@@ -106,8 +117,8 @@ function paramDay(params: unknown): string {
 
 app.get("/api/health", async () => ({
   ok: true,
-  name: config.name,
-  version: "0.3.0",
+  name: config.name.trim() || "某鱼",
+  version: "0.3.1",
   root,
   hasKey: Boolean(config.model.apiKey),
   time: Date.now(),
@@ -525,7 +536,15 @@ app.put("/api/settings", async (request, reply) => {
 
   const oldPort = config.ui.port;
   const next = deepMerge<AppConfig>(config, safe);
-  if (!next.name.trim()) next.name = config.name;
+  const nextName = next.name.trim();
+  if (!nextName) {
+    return reply.code(400).send({ error: "先给她起个名字，再保存设置。" });
+  }
+  if (config.setupPending && next.setupPending && nextName === config.name) {
+    return reply.code(400).send({ error: "先给她起个名字，再保存设置。" });
+  }
+  next.name = nextName;
+  next.setupPending = false;
   if (!next.ownerTitle.trim()) next.ownerTitle = config.ownerTitle;
   if (!next.model.baseUrl.trim()) next.model.baseUrl = config.model.baseUrl;
   if (!next.model.model.trim()) next.model.model = config.model.model;
@@ -542,6 +561,7 @@ app.put("/api/settings", async (request, reply) => {
   next.mood.base = Math.max(0, Math.min(100, Number(next.mood.base) || 65));
   next.web.enabled = Boolean(next.web.enabled);
   next.web.ownTimeEnabled = Boolean(next.web.ownTimeEnabled);
+  next.ui.notificationsEnabled = Boolean(next.ui.notificationsEnabled);
   if (!Array.isArray(next.web.rssFeeds)) next.web.rssFeeds = [];
   next.web.rssFeeds = next.web.rssFeeds.filter((item): item is string => typeof item === "string" && item.startsWith("http"));
 
@@ -597,7 +617,7 @@ const port = Number(process.env.CHATBRIDGE_PORT) || Number(config.ui.port) || 77
 try {
   await app.listen({ host: "127.0.0.1", port });
   scheduler.start();
-  console.log(`\n  DeepHome · ${config.name} 的房间`);
+  console.log(`\n  DeepHome · ${config.name.trim() || "某鱼"} 的房间`);
   console.log(`  http://127.0.0.1:${port}`);
   console.log(`  数据：${root}\n`);
 } catch (error) {

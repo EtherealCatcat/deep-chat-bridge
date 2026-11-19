@@ -16,15 +16,13 @@ import {
   Power,
   RotateCcw,
   Save,
-  Server,
   Settings2,
   Trash2,
   Wallet,
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
-import { api, clockToMin, formatTime, isTauri, minToClock } from "../api";
+import { api, clockToMin, formatTime, minToClock } from "../api";
 import { getAutostart, setAutostart } from "../autostart";
-import { sendTestNotification } from "../notify";
+import { initNotifications, setNotificationsEnabled } from "../notify";
 import type { AppConfig, SettingsPayload } from "../types";
 import { Badge, Card, Labeled, Loading, SectionTitle } from "./ui";
 
@@ -121,6 +119,7 @@ export function SettingsView({
       setConfig(data.config);
       setApiKey("");
       setDirty(false);
+      setNotificationsEnabled(data.config.ui.notificationsEnabled);
     } catch (error) {
       showToast(error instanceof Error ? error.message : "读取设置失败。", "error");
     }
@@ -191,22 +190,6 @@ export function SettingsView({
     }
   }
 
-  async function testNotification() {
-    try {
-      await sendTestNotification();
-      showToast("测试通知已发出。");
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "通知发送失败。", "error");
-    }
-  }
-
-  async function openLogs() {
-    try {
-      await invoke("open_logs");
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "打不开日志目录。", "error");
-    }
-  }
 
   async function changeAvatar(file: File | undefined) {
     if (!file || avatarBusy) return;
@@ -250,6 +233,10 @@ export function SettingsView({
   async function save() {
     const next = effectiveConfig();
     if (!next || saving) return;
+    if (!next.name.trim() || next.setupPending) {
+      showToast("先给她起个名字，再保存设置。", "error");
+      return;
+    }
     setSaving(true);
     try {
       const result = await api.saveSettings(next);
@@ -469,10 +456,11 @@ export function SettingsView({
               称呼
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Labeled label="她的名字">
+              <Labeled label="她的名字" hint={config.setupPending ? "第一次见面，先给她起个名字" : undefined}>
                 <input
-                  value={config.name}
-                  onChange={(event) => edit({ ...config, name: event.target.value })}
+                  value={config.setupPending ? "" : config.name}
+                  placeholder="某鱼"
+                  onChange={(event) => edit({ ...config, name: event.target.value, setupPending: false })}
                   className="input-warm"
                 />
               </Labeled>
@@ -771,30 +759,6 @@ export function SettingsView({
                 spellCheck={false}
               />
             </Labeled>
-            <div className="border-t border-line/50 pt-4">
-              <div className="mb-2 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-ink-faint">
-                <Server className="h-3 w-3" />
-                服务
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {isTauri() ? (
-                  <Labeled label="端口" hint="应用启动时自动选择空闲端口">
-                    <div className="input-warm text-[11px] text-ink-faint">自动分配</div>
-                  </Labeled>
-                ) : (
-                  <Labeled label="端口" hint="改动后重启">
-                    <input
-                      type="number"
-                      min={1024}
-                      max={65535}
-                      value={config.ui.port}
-                      onChange={(event) => patchUi({ port: Number(event.target.value) })}
-                      className="input-warm"
-                    />
-                  </Labeled>
-                )}
-              </div>
-            </div>
           </div>
         </Card>
       </div>
@@ -806,29 +770,21 @@ export function SettingsView({
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <Toggle
+            checked={config.ui.notificationsEnabled}
+            onChange={(value) => {
+              patchUi({ notificationsEnabled: value });
+              setNotificationsEnabled(value);
+              if (value) void initNotifications();
+            }}
+            label="展示通知"
+            hint="她发来新消息时，通过 macOS 通知提醒你。"
+          />
+          <Toggle
             checked={autostart}
             onChange={(value) => void toggleAutostart(value)}
             label="登录时自动打开"
             hint="macOS 下次登录后，鲸鲸会自己醒来。"
           />
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-line/50 bg-white/35 px-3 py-2.5">
-            <div>
-              <div className="text-[11.5px] text-ink">服务端日志</div>
-              <div className="mt-0.5 text-[9.5px] text-ink-faint">~/Library/Logs/DeepHome/server.log</div>
-            </div>
-            {isTauri() ? (
-              <div className="flex shrink-0 items-center gap-1.5">
-                <button type="button" onClick={() => void testNotification()} className="btn-ghost text-[10px]">
-                  测试通知
-                </button>
-                <button type="button" onClick={() => void openLogs()} className="btn-ghost text-[10px]">
-                  打开
-                </button>
-              </div>
-            ) : (
-              <Badge>桌面应用</Badge>
-            )}
-          </div>
         </div>
       </Card>
 

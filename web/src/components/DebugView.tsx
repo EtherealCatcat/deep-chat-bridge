@@ -8,6 +8,7 @@ import {
   FileText,
   LoaderCircle,
   RefreshCw,
+  Server,
   Terminal,
   Wand2,
 } from "lucide-react";
@@ -107,16 +108,6 @@ export function DebugView({ showToast }: { showToast: (text: string, kind?: "inf
               {refreshing ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               刷新
             </button>
-            {isTauri() ? (
-              <button
-                type="button"
-                onClick={() => void invoke("open_logs").catch(() => showToast("打不开日志目录。", "error"))}
-                className="btn-ghost"
-              >
-                <FileText className="h-3.5 w-3.5" />
-                日志
-              </button>
-            ) : null}
             <button type="button" onClick={() => void consolidate()} disabled={consolidating} className="btn-primary">
               {consolidating ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
               整理记忆
@@ -125,7 +116,7 @@ export function DebugView({ showToast }: { showToast: (text: string, kind?: "inf
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Card className="p-4">
           <div className="mb-2 inline-flex items-center gap-1.5 text-[9.5px] uppercase tracking-[0.16em] text-ink-faint">
             <Cpu className="h-3 w-3" />
@@ -179,6 +170,27 @@ export function DebugView({ showToast }: { showToast: (text: string, kind?: "inf
           </div>
           <div className="font-mono text-[12px] text-ink">{data.deferred.length} 个延后任务</div>
           <div className="mt-1 text-[9.5px] text-ink-faint">峰时不做后台，闲时补上。</div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="mb-2 inline-flex items-center gap-1.5 text-[9.5px] uppercase tracking-[0.16em] text-ink-faint">
+            <Server className="h-3 w-3" />
+            服务
+          </div>
+          <div className="font-mono text-[12px] text-ink">
+            {isTauri() ? "端口自动分配" : `端口 ${window.location.port || data.config.ui.port}`}
+          </div>
+          <div className="mt-1 truncate text-[9.5px] text-ink-faint">~/Library/Logs/DeepHome/server.log</div>
+          {isTauri() ? (
+            <button
+              type="button"
+              onClick={() => void invoke("open_logs").catch(() => showToast("打不开日志目录。", "error"))}
+              className="mt-2 inline-flex items-center gap-1 text-[10px] text-sea-deep hover:text-coral"
+            >
+              <FileText className="h-3 w-3" />
+              打开日志
+            </button>
+          ) : null}
         </Card>
       </div>
 

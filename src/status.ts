@@ -29,8 +29,9 @@ export function buildStatus(input: {
   const usage = todayUsage(paths, config);
   const own = ownStateSnapshot(loadOwn(paths), config, now);
   return {
-    name: config.name,
-    ownerTitle: config.ownerTitle,
+    name: config.name.trim() || "某鱼",
+    ownerTitle: config.ownerTitle.trim() || "主人",
+    setupRequired: Boolean(config.setupPending),
     busy,
     burst,
     burstCount,

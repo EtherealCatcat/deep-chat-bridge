@@ -72,6 +72,7 @@ export function ensureLayout(p: Paths): void {
 export const DEFAULT_CONFIG: AppConfig = {
   name: "鲸鲸",
   ownerTitle: "主人",
+  setupPending: false,
   model: {
     provider: "deepseek",
     baseUrl: "https://api.deepseek.com",
@@ -130,7 +131,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     ownTimeEnabled: true,
     rssFeeds: ["https://sspai.com/feed", "https://hnrss.org/frontpage"],
   },
-  ui: { port: 7788 },
+  ui: { port: 7788, notificationsEnabled: true },
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

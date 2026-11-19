@@ -103,6 +103,7 @@ export type Phase = "asleep" | "waking" | "awake" | "sleepy";
 export interface Status {
   name: string;
   ownerTitle: string;
+  setupRequired: boolean;
   busy: boolean;
   burst: boolean;
   burstCount: number;
@@ -232,6 +233,7 @@ export interface AvatarInfo {
 export interface AppConfig {
   name: string;
   ownerTitle: string;
+  setupPending: boolean;
   model: ModelConfig;
   behavior: {
     rotateHour: number;
@@ -267,7 +269,7 @@ export interface AppConfig {
   mood: { enabled: boolean; base: number; halfLifeHours: number };
   cost: { dailyBudgetCny: number; peakPolicy: boolean; peakWindows: PeakWindow[] };
   web: { enabled: boolean; ownTimeEnabled: boolean; rssFeeds: string[] };
-  ui: { port: number };
+  ui: { port: number; notificationsEnabled: boolean };
 }
 
 export interface SettingsPayload {

@@ -36,7 +36,7 @@ npm run build:web
 CHATBRIDGE_HOME=./data npm run dev:server
 ```
 
-打开 <http://127.0.0.1:7788>（源码/开发模式的默认端口），进「设置」填 API Key，点「测试连接」。
+打开 <http://127.0.0.1:7788>（源码/开发模式的默认端口）。首次打开会直接进「设置」：先给她起个名字（保存前必填），再选择模型、填 API Key，点「测试连接」。
 
 开发模式（服务端 + Vite 热更新）：
 
@@ -54,7 +54,7 @@ npm start
 # 数据默认在 ~/.chatbridge/
 ```
 
-首次启动会生成 `config.json`（权限 600）、`persona.md`、记忆种子、内置表情和空目录。
+首次启动会生成 `config.json`（权限 600）、`persona.md`、记忆种子、内置表情和空目录；名字未保存前，界面用「某鱼」占位，模型也留空等你选择。
 
 ## 双击使用
 
@@ -70,7 +70,7 @@ npm run tauri:build:p5    # .app + .dmg
 
 ```
 src-tauri/target/release/bundle/macos/DeepHome.app
-src-tauri/target/release/bundle/dmg/DeepHome_0.3.0_aarch64.dmg
+src-tauri/target/release/bundle/dmg/DeepHome_0.3.1_aarch64.dmg
 ```
 
 应用启动时会：
@@ -101,7 +101,7 @@ cp -R data/. ~/.chatbridge/
 xattr -dr com.apple.quarantine /Applications/DeepHome.app
 ```
 
-首次打开会请求通知权限；设置页可以打开/关闭「登录时自动打开」。当前包只带 Apple Silicon 的 Node，Intel Mac 请自行替换 `src-tauri/resources/node`。
+首次打开会请求通知权限；设置页可以打开/关闭「展示通知」与「登录时自动打开」。当前包只带 Apple Silicon 的 Node，Intel Mac 请自行替换 `src-tauri/resources/node`。
 
 开发模式仍然是：
 
@@ -201,9 +201,9 @@ DeepSeek 的高峰时段默认是**北京时间工作日 09:00–12:00、14:00�
 ## 开机自启、通知与日志
 
 - **开机自启**：设置页「这台电脑」→「登录时自动打开」；通过 macOS LaunchAgent 注册，关掉即移除。
-- **系统通知**：应用在后台时，她发来新消息会走 macOS 通知；点通知会回到聊天页。首次启动会请求权限；如果当时点了拒绝，去「系统设置 → 通知 → DeepHome」重新打开，设置页的「测试通知」可立即验证。
+- **系统通知**：应用在后台时，她发来新消息会走 macOS 通知；点通知会回到聊天页。首次启动会请求权限；如果当时点了拒绝，去「系统设置 → 通知 → DeepHome」重新打开。设置页的「展示通知」可以随时开关应用内提醒。
 - **单实例与端口**：重复打开只聚焦原窗口；sidecar 用随机回环端口，避免 7788 被占用。
-- **日志**：`~/Library/Logs/DeepHome/server.log`，设置页和调试页都有打开入口。
+- **日志**：`~/Library/Logs/DeepHome/server.log`；入口统一在「调试」页，端口也在同一张服务卡片里。
 - **合盖/唤醒**：sidecar 随系统睡眠暂停，唤醒后调度器按 `resume_gap` 补偿；不会补发错过的主动消息。
 
 ## 常用命令

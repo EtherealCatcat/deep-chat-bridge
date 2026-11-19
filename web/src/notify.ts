@@ -4,6 +4,11 @@ import { isTauri } from "./api";
 let granted = false;
 let initialized = false;
 let native = false;
+let enabled = true;
+
+export function setNotificationsEnabled(value: boolean): void {
+  enabled = value;
+}
 
 function openChat(): void {
   window.location.hash = "#chat";
@@ -52,7 +57,7 @@ async function deliver(title: string, body: string): Promise<void> {
 }
 
 export async function notifyMessage(text: string): Promise<void> {
-  if (!granted && !native) return;
+  if (!enabled || (!granted && !native)) return;
   const body = text.trim().slice(0, 160);
   if (!body) return;
   try {

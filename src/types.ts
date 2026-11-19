@@ -109,6 +109,8 @@ export interface WebConfig {
 export interface AppConfig {
   name: string;
   ownerTitle: string;
+  /** 全新安装且尚未保存称呼时为 true；名字用「某鱼」占位。 */
+  setupPending: boolean;
   model: ModelConfig;
   behavior: BehaviorConfig;
   life: LifeConfig;
@@ -116,7 +118,7 @@ export interface AppConfig {
   mood: MoodConfig;
   cost: CostConfig;
   web: WebConfig;
-  ui: { port: number };
+  ui: { port: number; notificationsEnabled: boolean };
 }
 
 export interface QuoteRef {

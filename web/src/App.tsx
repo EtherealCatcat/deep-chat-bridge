@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, X } from "lucide-react";
 import { API_BASE, api, isTauri } from "./api";
-import { initNotifications, notifyMessage } from "./notify";
+import { initNotifications, notifyMessage, setNotificationsEnabled } from "./notify";
 import { AvatarContext, DEFAULT_AVATAR } from "./avatar";
 import type { ChatMessage, Page, ServerEvent, Status } from "./types";
 import { Sidebar } from "./components/Sidebar";
@@ -72,7 +72,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void initNotifications();
+    void api
+      .settings()
+      .then(({ config }) => {
+        setNotificationsEnabled(config.ui.notificationsEnabled);
+        if (config.ui.notificationsEnabled) void initNotifications();
+      })
+      .catch(() => {
+        void initNotifications();
+      });
   }, []);
 
   useEffect(() => {
@@ -114,6 +122,7 @@ export default function App() {
         if (!alive) return;
         setStatus(nextStatus);
         setMessages(history.messages);
+        if (nextStatus.setupRequired && !window.location.hash) setPage("settings");
       })
       .catch((error) => {
         if (!alive) return;
@@ -122,7 +131,7 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [showToast]);
+  }, [setPage, showToast]);
 
   useEffect(() => {
     const onHash = () => setPageState(pageFromHash());

@@ -5,6 +5,7 @@ import type { Phase } from "./rhythm.js";
 export interface StatusSnapshot {
   name: string;
   ownerTitle: string;
+  setupRequired: boolean;
   busy: boolean;
   burst: boolean;
   burstCount: number;

@@ -2,7 +2,7 @@
 
 > 原型：[dsh-jingjing](https://github.com/XiangXiaoYuan5254/dsh-jingjing)（MIT）
 > 目标：保留它「像一个人」的机制，去掉 DSH 插件、NapCat 和 QQ 依赖，做成一台 Mac 上可长期运行的本地应用。
-> 状态：讨论稿 v0.1 · 2026-11-18 · 尚未开始编码
+> 状态：设计讨论稿 v0.1 · 2026-11-18。项目已实现到 0.2.0（P0–P5），实际行为以 README、CHANGELOG 和代码为准；本文保留当时的取舍与里程碑记录，不再逐条同步。
 
 ---
 

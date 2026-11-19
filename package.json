@@ -1,6 +1,6 @@
 {
   "name": "chatbridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "A local, file-based companion who lives in a little room on your Mac.",

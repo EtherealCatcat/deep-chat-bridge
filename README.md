@@ -4,7 +4,7 @@
 
 她现在会聊天、有自己的心情和作息、会主动找你、会记东西、会写日记；所有数据都在本地文件里，你可以随时打开看、改、备份。
 
-> 当前是 **P0–P5** 版本：能聊天、有生活、有记忆、有自己的时间，也能打包成 Mac 应用双击打开。
+> 当前是 **0.2.0（P0–P5）** 版本：能聊天、有生活、有记忆、有自己的时间，也能打包成 Mac 应用双击打开。
 
 ---
 
@@ -37,7 +37,7 @@ npm run build:web
 CHATBRIDGE_HOME=./data npm run dev:server
 ```
 
-打开 <http://127.0.0.1:7788>，进「设置」填 API Key，点「测试连接」。
+打开 <http://127.0.0.1:7788>（源码/开发模式的默认端口），进「设置」填 API Key，点「测试连接」。
 
 开发模式（服务端 + Vite 热更新）：
 
@@ -71,12 +71,12 @@ npm run tauri:build:p5    # .app + .dmg
 
 ```
 src-tauri/target/release/bundle/macos/DeepHome.app
-src-tauri/target/release/bundle/dmg/DeepHome_0.1.0_aarch64.dmg
+src-tauri/target/release/bundle/dmg/DeepHome_0.2.0_aarch64.dmg
 ```
 
 应用启动时会：
 
-- 随机选一个 `127.0.0.1` 空闲端口，拉起内置的 Node sidecar；前端通过 Tauri command 获取端口，不写死 7788。
+- 随机选一个 `127.0.0.1` 空闲端口，拉起内置的 Node sidecar；前端通过 Tauri command 获取端口，不依赖固定 7788。
 - 同一时间只允许一个实例；再次双击会聚焦已有窗口。
 - 退出应用时结束 sidecar；日志在 `~/Library/Logs/DeepHome/server.log`。
 - 数据固定用 `~/.chatbridge/`；如果之前用 `./data` 开发，先备份再复制过去：
@@ -86,13 +86,13 @@ cp -R ~/.chatbridge ~/.chatbridge.backup
 cp -R data/. ~/.chatbridge/
 ```
 
-图标：`.app` / `.dmg` 使用 `src-tauri/icons-app/`（源图 `APPicon.webp`），开发期的 `src-tauri/icons/` 使用 `base.webp`。`web/public/avatar.png` 是聊天头像，不跟应用图标混用。
+图标：`.app` / `.dmg` 使用 `src-tauri/icons-app/`，开发期的 `src-tauri/icons/` 是另一套图标；两套图标的原始设计图不随仓库分发，生成后的图标目录在仓库里。`web/public/avatar.png` 是聊天头像，不跟应用图标混用。
 
 ### 后台常驻与 Menu Bar
 
 - 关闭主窗口只是把窗口藏起来，DeepHome 和 sidecar 继续运行；点 Dock 图标或菜单栏图标可以重新打开。
 - 菜单栏菜单：新消息数、自己的活动、查看日记、查看成长、转到设置、退出。退出会同时结束 sidecar。
-- macOS 26（Tahoe）及以后会把新应用图标默认放进菜单栏的隐藏区。第一次启动如果没看到鱼图标，去「系统设置 → 菜单栏」找到 DeepHome，设为在菜单栏中显示；设置页也有同样的提示。
+- macOS 26（Tahoe）及以后可能把新应用图标放进菜单栏的隐藏区。第一次启动如果没看到鱼图标，去「系统设置 → 菜单栏」找到 DeepHome，设为在菜单栏中显示；设置页也有同样的提示。
 - 设置页「这台电脑」里有一个临时的「Menu Bar 图标」选项：模板镂空 / 粗描边 / 黑白灰；会自动跟随 macOS 深色/浅色。定版后只保留选择好的那一套，并移除这个临时选项。
 - 强制退出：`Cmd+Q`，或菜单栏「退出」；两者都会走 `RunEvent::Exit` 结束 sidecar。
 
@@ -234,7 +234,7 @@ npm run tauri:build:p5 # 打包 .app/.dmg（未签名）
 - 出网只有：模型 API、你配置的 RSS、她主动读的网页。
 - 聊天内容会发给模型提供方（除非你换成本地 Ollama）；发图时，当前这张图会以 base64 发给模型，历史不会重发。
 - 网页内容会被包进 `<untrusted_web>`，当资料而不是指令；`web_read` 会拒绝私网地址。
-- 数据导出/删除：直接删 `~/.chatbridge/`；备份交给 Time Machine。服务端 stdout/stderr 只写到 `~/Library/Logs/DeepHome/server.log`。
+- 数据导出/删除：直接删 `~/.chatbridge/`；备份交给 Time Machine。打包应用的 sidecar stdout/stderr 写到 `~/Library/Logs/DeepHome/server.log`；源码/浏览器模式输出到终端。
 
 ## 设计文档
 

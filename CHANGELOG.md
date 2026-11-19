@@ -2,9 +2,9 @@
 
 本文件记录 chatBridge 的重要改动。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
-当前主线为 `main`（2026-11-18）。后续并行功能分支请从最新 `main` 拉出，合并时把条目补到 `[Unreleased]`。
+当前主线为 `main`（2026-11-19）。后续并行功能分支请从最新 `main` 拉出，合并时把条目补到下一个版本。
 
-## [Unreleased]
+## [0.2.0] - 2026-11-19
 
 ### 新增
 
@@ -12,26 +12,33 @@
 - **角色侧消息引用**：模型可以在回复里写 `[引用] 原话`，服务端在最近消息中匹配并把引用挂到下一气泡；匹配不到时降级为普通文字，不编造引用。
 - **后台常驻与 Menu Bar**：关闭主窗口不再退出，Tauri 托盘常驻并把窗口隐藏；菜单提供新消息数、自己的活动、日记/成长/设置跳转和退出。消息/own 未读数由服务端统计，隐藏时也累计；own 未读在打开「今天」后清零。
 - **Menu Bar 图标样式（临时）**：模板镂空 / 粗描边 / 黑白灰三套，按 macOS 深浅色自动切换；设置页可临时选择，定版后保留一套并移除选项。
-- **macOS Tahoe 菜单栏提示**：macOS 26+ 默认隐藏新应用的状态图标，首次启动需在「系统设置 → 菜单栏」允许 DeepHome；README 与设置页已说明。
-
-### 新增（P5）
-
+- **macOS Tahoe 菜单栏提示**：macOS 26+ 可能把新应用的状态图标放进隐藏区，首次启动需在「系统设置 → 菜单栏」允许 DeepHome；README 与设置页已说明。
 - **P5-A 双击即用**：服务端用 esbuild 打成单文件 ESM，随应用带一份 arm64 Node；Tauri 启动时选空闲回环端口拉起 sidecar，前端通过 `server_port` command 获取端口；退出时结束子进程。
 - **单实例**：`tauri-plugin-single-instance`，重复打开只聚焦已有窗口。
 - **P5-B 日常可用**：`tauri-plugin-autostart` 的登录自启（LaunchAgent）、`tauri-plugin-notification` 的后台消息通知（点击回聊天）、sidecar 日志 `~/Library/Logs/DeepHome/server.log`、设置/调试页的日志入口。
-- **打包**：`npm run build:p5` 准备 Web/服务端/Node/贴纸资源，`npm run tauri:build:p5` 产出 `DeepHome.app` 与 `DeepHome_0.1.0_aarch64.dmg`（未签名、未公证）。
-- **DeepHome 品牌**：桌面应用名改为 DeepHome，bundle identifier 改为 `com.deephome.desktop`；`.app`/`.dmg` 图标来自 `APPicon.webp`，`src-tauri/icons/` 系列图标改为 `base.webp`。
+- **打包**：`npm run build:p5` 准备 Web/服务端/Node/贴纸资源，`npm run tauri:build:p5` 产出 `DeepHome.app` 与 `DeepHome_0.2.0_aarch64.dmg`（未签名、未公证）。
+- **DeepHome 品牌**：桌面应用名改为 DeepHome，bundle identifier 改为 `com.deephome.desktop`；`.app`/`.dmg` 图标使用 `src-tauri/icons-app/`，开发期 `src-tauri/icons/` 使用另一套图标（源图不随仓库分发）。
 
 ### 变更
 
 - 应用数据固定 `~/.chatbridge/`；开发用的 `./data` 先备份再通过 `cp -R data/. ~/.chatbridge/` 迁移。
 - Tauri 窗口改为 setup 阶段创建：先起 sidecar、拿到端口，再建主窗口；capabilities 增加 notification/autostart。
 - `src/stickers.ts` 支持 `CHATBRIDGE_ASSETS_DIR`，`src/server.ts` 支持 `CHATBRIDGE_PORT`。
+- 桌面应用版本号提升至 `0.2.0`；README 中的产物名同步更新。
 
-### 计划中
+### 已知限制
 
-- P5-C：语音、Live2D、导入原型数据等可选能力。
-- 并行分支上的新功能；合并时在此登记。
+- 未做正式签名/公证；小范围分发需右键打开或 `xattr -dr com.apple.quarantine`。
+- 当前 sidecar 只带 Apple Silicon Node；Intel 需要自行替换 `src-tauri/resources/node`。
+- 合盖睡眠时 sidecar 会暂停，唤醒后调度器补偿，但不会补发错过的主动消息。
+
+### 提交记录
+
+| 提交 | 说明 |
+|---|---|
+| `cc442bc` | 连发消息、角色侧消息引用 |
+| `95a1ef2` | P5-A/B sidecar 桌面应用、自启、通知、日志 |
+| `8a94fe6` | 后台常驻与 Menu Bar |
 
 ## [0.1.0] - 2026-11-18
 
@@ -52,7 +59,7 @@
 - **图像消息**：输入框可发图，浏览器先压到最长边 1280 / JPEG 0.84；服务端存 `media/`，当前轮以 `image_url` + base64 交给 `deepseek-flash`，历史只保留 `[图片]`。
 - **表情包**：100 张大肥鱼静态表情，首次启动自动合并进 `stickers/index.json`；模型通过 `send_sticker` 发送图片。
 - **Web UI**：聊天、今天、记忆、日记、人设、成长、设置、调试 8 个页面；SSE 实时状态、峰谷徽章、记忆 diff、own 记录、lastTurn 调试。
-- **Tauri 原生窗口**：Tauri 2 shell，窗口标题「鲸鲸的房间」；当前服务端仍由 npm 启动，P5 再打 sidecar。
+- **Tauri 原生窗口**：Tauri 2 shell，窗口标题「鲸鲸的房间」；0.2.0 起改用内置 sidecar，双击即用。
 - **DeepSeek 峰谷降载**：工作日 `09:00–12:00`、`14:00–18:00`（法定节假日除外）为高峰；峰时降低 `max_tokens`、历史条数和工具步数，暂停主动消息、side call、日记、记忆整理、own 和上网，任务进 deferred 队列，闲时补跑。
 - **预算闸门**：默认每日预算 5 元，80% 进入 tight，100% 只保留直接聊天。
 - **测试**：11 个 Vitest 文件、41 个用例，覆盖回复解析、引用、图片、表情、峰谷、节假日、作息、提醒、记忆、时间线等。
@@ -83,9 +90,6 @@
 
 ### 已知限制
 
-- 未做正式签名/公证；小范围分发需右键打开或 `xattr -dr com.apple.quarantine`。
-- 当前 sidecar 只带 Apple Silicon Node；Intel 需要自行替换 `src-tauri/resources/node`。
-- 合盖睡眠时 sidecar 会暂停，唤醒后调度器补偿，但不会补发错过的主动消息。
 - 单用户、单机设计，没有账号体系或多端同步。
 - 本地 Ollama 只作为可选离线兜底，默认仍走 DeepSeek API。
 
@@ -99,3 +103,7 @@
 | `f47b43e` | DeepSeek 娘头像、用户发图、表情包 |
 | `baecf0d` | 替换为 100 张大肥鱼静态表情 |
 
+## 计划中
+
+- P5-C：语音、Live2D、导入原型数据等可选能力。
+- 并行分支上的新功能；合并时在此登记。

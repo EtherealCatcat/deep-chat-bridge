@@ -87,9 +87,10 @@ export function toLLMHistory(messages: ChatMessage[], max: number, config?: AppC
     .filter((m) => m.kind === "text" || m.kind === "sticker" || m.kind === "image")
     .slice(-max)
     .map<LLMMessage>((m) => {
+      const stickerDesc = typeof m.meta?.desc === "string" ? m.meta.desc : "";
       const body =
         m.kind === "sticker"
-          ? `[表情:${m.text}]`
+          ? `[表情:${m.text}${stickerDesc ? `（${stickerDesc}）` : ""}]`
           : m.kind === "image"
             ? `[图片${m.text && m.text !== "（发来一张图片）" ? `：${m.text}` : ""}]`
             : m.text;

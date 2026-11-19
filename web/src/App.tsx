@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, X } from "lucide-react";
 import { API_BASE, api, isTauri } from "./api";
 import { initNotifications, notifyMessage } from "./notify";
+import { AvatarContext, DEFAULT_AVATAR } from "./avatar";
 import type { ChatMessage, Page, ServerEvent, Status } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { ChatView } from "./components/ChatView";
@@ -28,6 +29,7 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [typing, setTyping] = useState(false);
   const [readAt, setReadAt] = useState<number | null>(null);
+  const [avatar, setAvatar] = useState(DEFAULT_AVATAR);
   const [connected, setConnected] = useState(false);
   const [toast, setToast] = useState<{ text: string; kind: ToastKind } | null>(null);
   const toastTimer = useRef<number | null>(null);
@@ -63,6 +65,10 @@ export default function App() {
     } catch {
       // 已读失败不影响聊天。
     }
+  }, []);
+
+  useEffect(() => {
+    void api.avatar().then((info) => setAvatar(info.url)).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -215,6 +221,20 @@ export default function App() {
       .catch(() => undefined);
   }, [page, status?.own?.unread]);
 
+  async function sendSticker(name: string) {
+    if (status?.burst) {
+      showToast("连发中先只发文字，表情等她收完再发。", "error");
+      return;
+    }
+    try {
+      const result = await api.sendSticker(name);
+      addMessage(result.message);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "表情没发出去。", "error");
+      throw error;
+    }
+  }
+
   async function send(text: string, quote?: ChatMessage, image?: string) {
     const trimmed = text.trim();
     if (!trimmed && !image) return;
@@ -244,6 +264,7 @@ export default function App() {
   }
 
   return (
+    <AvatarContext.Provider value={avatar}>
     <div className="flex h-screen overflow-hidden">
       <Sidebar status={status} page={page} onNavigate={navigate} connected={connected} />
 
@@ -255,6 +276,7 @@ export default function App() {
             typing={typing}
             readAt={readAt}
             onSend={send}
+            onSticker={sendSticker}
             onBurst={toggleBurst}
             onNavigateSettings={() => navigate("settings")}
           />
@@ -269,7 +291,7 @@ export default function App() {
         ) : page === "growth" ? (
           <GrowthView showToast={showToast} />
         ) : page === "settings" ? (
-          <SettingsView showToast={showToast} />
+          <SettingsView showToast={showToast} avatar={avatar} onAvatarChange={setAvatar} />
         ) : (
           <DebugView showToast={showToast} />
         )}
@@ -295,5 +317,6 @@ export default function App() {
         </div>
       ) : null}
     </div>
+    </AvatarContext.Provider>
   );
 }

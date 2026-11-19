@@ -132,7 +132,7 @@ export function ensureOwnSchedule(
   if (state.activeUntil && state.activeUntil <= now) state.activeUntil = 0;
   if (state.activeUntil > now) return state;
   if (state.nextAt && state.windowEnd > now) {
-    const bad = (config.cost.peakPolicy && isPeak(state.nextAt, config.behavior.timezone)) || isQuietHours(config, state.nextAt);
+    const bad = isPeak(config, state.nextAt) || isQuietHours(config, state.nextAt);
     if (!bad) return state;
     state.nextAt = 0;
     state.windowEnd = 0;

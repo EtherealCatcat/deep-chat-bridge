@@ -78,7 +78,7 @@ export async function consolidateMemory(day: string, ctx: ConsolidateContext): P
       completionTokens: result.usage.completion_tokens,
       cacheHitTokens: result.usage.prompt_cache_hit_tokens,
       cacheMissTokens: result.usage.prompt_cache_miss_tokens,
-      peak: isPeak(Date.now(), config.behavior.timezone),
+      peak: isPeak(config, Date.now()),
       kind: "consolidate",
     });
 

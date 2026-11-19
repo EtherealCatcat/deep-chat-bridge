@@ -418,3 +418,9 @@
 .scroll-fade {
   mask-image: linear-gradient(to bottom, transparent, black 14px, black calc(100% - 10px), transparent);
 }
+
+/* 表情包去白边：白底与纸色/气泡底色相乘，边缘自然消失 */
+.sticker-art {
+  background: transparent;
+  mix-blend-mode: multiply;
+}

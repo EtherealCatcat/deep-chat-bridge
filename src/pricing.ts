@@ -36,15 +36,52 @@ export function pricesFor(model: string): ModelPrices {
   return MODEL_PRICES["deepseek-flash"];
 }
 
-/** 高峰：北京时间周一至周五 09:00–12:00、14:00–18:00，不含法定节假日。 */
-export function isPeak(ts = Date.now(), timeZone = "Asia/Shanghai"): boolean {
-  const key = dayKey(ts, 0, timeZone);
+export const DEFAULT_PEAK_WINDOWS: { start: number; end: number }[] = [
+  { start: 9 * 60, end: 12 * 60 },
+  { start: 14 * 60, end: 18 * 60 },
+];
+
+function normalizeMinutes(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0, Math.min(1439, Math.round(n))) : fallback;
+}
+
+export function normalizePeakWindows(windows: unknown): { start: number; end: number }[] {
+  const rows = Array.isArray(windows) ? windows : [];
+  const clean = rows
+    .slice(0, 8)
+    .map((row) => {
+      const item = (row ?? {}) as { start?: unknown; end?: unknown };
+      return {
+        start: normalizeMinutes(item.start, -1),
+        end: normalizeMinutes(item.end, -1),
+      };
+    })
+    .filter((row) => row.start >= 0 && row.end >= 0 && row.start !== row.end);
+  return clean.length ? clean.slice(0, 4) : DEFAULT_PEAK_WINDOWS.map((row) => ({ ...row }));
+}
+
+export function formatPeakWindow(window: { start: number; end: number }): string {
+  const clock = (minutes: number) =>
+    `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  return `${clock(window.start)}–${clock(window.end)}`;
+}
+
+/** 高峰：自定义时段，默认工作日 09:00–12:00、14:00–18:00，不含法定节假日。 */
+export function isPeak(config: Pick<AppConfig, "cost" | "behavior">, ts = Date.now()): boolean {
+  if (!config.cost.peakPolicy) return false;
+  const key = dayKey(ts, 0, config.behavior.timezone);
   if (!isWorkday(key)) return false;
-  const minutes = minutesOfDay(ts, timeZone);
-  return (minutes >= 9 * 60 && minutes < 12 * 60) || (minutes >= 14 * 60 && minutes < 18 * 60);
+  const minutes = minutesOfDay(ts, config.behavior.timezone);
+  return config.cost.peakWindows.some((window) =>
+    window.start < window.end
+      ? minutes >= window.start && minutes < window.end
+      : minutes >= window.start || minutes < window.end,
+  );
 }
 
 export interface PeakInfo {
+  enabled: boolean;
   isPeak: boolean;
   label: string;
   nextChangeAt: number;
@@ -52,22 +89,34 @@ export interface PeakInfo {
   peakWindow: string;
 }
 
-export function peakInfo(ts = Date.now(), timeZone = "Asia/Shanghai"): PeakInfo {
-  const current = isPeak(ts, timeZone);
+export function peakInfo(config: Pick<AppConfig, "cost" | "behavior">, ts = Date.now()): PeakInfo {
+  const windows = config.cost.peakWindows;
+  if (!config.cost.peakPolicy || !windows.length) {
+    return {
+      enabled: false,
+      isPeak: false,
+      label: "已关闭",
+      nextChangeAt: ts,
+      nextIsPeak: false,
+      peakWindow: "全时段按闲时计费",
+    };
+  }
+  const current = isPeak(config, ts);
   let next = ts;
   for (let i = 1; i <= 14 * 24; i++) {
     const candidate = ts + i * 5 * 60_000;
-    if (isPeak(candidate, timeZone) !== current) {
+    if (isPeak(config, candidate) !== current) {
       next = candidate;
       break;
     }
   }
   return {
+    enabled: true,
     isPeak: current,
     label: current ? "忙时" : "闲时",
     nextChangeAt: next,
     nextIsPeak: !current,
-    peakWindow: "工作日 09:00–12:00 / 14:00–18:00",
+    peakWindow: windows.map(formatPeakWindow).join(" / "),
   };
 }
 
@@ -111,6 +160,7 @@ export function estimateCost(
 export type BudgetState = "ok" | "tight" | "exhausted";
 
 export interface CostPolicy {
+  peakEnabled: boolean;
   isPeak: boolean;
   peakLabel: string;
   nextChangeAt: number;
@@ -129,8 +179,8 @@ export interface CostPolicy {
 }
 
 export function costPolicy(config: AppConfig, usage: UsageDay, now = Date.now()): CostPolicy {
-  const info = peakInfo(now, config.behavior.timezone);
-  const peak = config.cost.peakPolicy && info.isPeak;
+  const info = peakInfo(config, now);
+  const peak = info.isPeak;
   const budget = Math.max(0, config.cost.dailyBudgetCny);
   const spent = usage.costCny;
   const left = Math.max(0, budget - spent);
@@ -164,12 +214,14 @@ export function costPolicy(config: AppConfig, usage: UsageDay, now = Date.now())
   }
 
   const reasons: string[] = [];
-  if (peak) reasons.push("忙时降载");
+  if (!info.enabled) reasons.push("峰谷已关闭");
+  else if (peak) reasons.push("忙时降载");
   if (budgetState === "tight") reasons.push("预算 80%");
   if (budgetState === "exhausted") reasons.push("预算用尽，只回消息");
   if (!reasons.length) reasons.push("闲时");
 
   return {
+    peakEnabled: info.enabled,
     isPeak: peak,
     peakLabel: info.label,
     nextChangeAt: info.nextChangeAt,

@@ -20,9 +20,10 @@ import { consolidateMemory, hasInbox } from "./consolidate.js";
 import { appendTimeline, readTimeline, readTimelineForDisplay } from "./timeline.js";
 import { loadDeferred, loadLife } from "./life.js";
 import { todayUsage } from "./usage.js";
-import { MODEL_PRICES, costPolicy, peakInfo } from "./pricing.js";
+import { MODEL_PRICES, costPolicy, normalizePeakWindows, peakInfo } from "./pricing.js";
 import { callLLM } from "./llm.js";
-import { listStickers } from "./stickers.js";
+import { findSticker, listStickers } from "./stickers.js";
+import { avatarFile, avatarInfo, clearAvatar, saveAvatar } from "./avatar.js";
 import { loadOwn, markOwnSeen, ownStateSnapshot, saveOwn } from "./own.js";
 import { readOwnLog } from "./web.js";
 import { backupFile, exists, readText, writeText } from "./store.js";
@@ -106,7 +107,7 @@ function paramDay(params: unknown): string {
 app.get("/api/health", async () => ({
   ok: true,
   name: config.name,
-  version: "0.2.0",
+  version: "0.3.0",
   root,
   hasKey: Boolean(config.model.apiKey),
   time: Date.now(),
@@ -152,8 +153,12 @@ app.post("/api/messages", async (request, reply) => {
   const body = requireObject(request.body);
   const text = String(body.text ?? "").trim();
   const rawImage = typeof body.image === "string" ? body.image.trim() : "";
-  if (!text && !rawImage) return reply.code(400).send({ error: "说点什么吧，或者发一张图片。" });
+  const stickerName = String(body.sticker ?? "").trim();
+  const sticker = stickerName ? findSticker(p, stickerName) : null;
+  if (stickerName && !sticker) return reply.code(400).send({ error: "这个表情找不到了。" });
+  if (!text && !rawImage && !sticker) return reply.code(400).send({ error: "说点什么吧，或者发一张图片。" });
   if (text.length > 4000) return reply.code(413).send({ error: "太长了，分几次说。" });
+  if (sticker && rawImage) return reply.code(400).send({ error: "表情和图片一次只能发一个。" });
 
   let imageInfo: { file: string; mime: string } | undefined;
   if (rawImage) {
@@ -181,6 +186,28 @@ app.post("/api/messages", async (request, reply) => {
       text: original.text.slice(0, 240),
       ts: original.ts,
     };
+  }
+
+  if (sticker) {
+    unread = 0;
+    const message = appendChatMessage(p, config, {
+      role: "user",
+      kind: "sticker",
+      text: sticker.name,
+      meta: {
+        file: sticker.file,
+        emoji: sticker.emoji,
+        desc: sticker.desc,
+        scene: sticker.scene,
+      },
+      quote,
+    });
+    updateStreak(p, config);
+    emit({ type: "message", message });
+    const detail = sticker.desc ?? sticker.scene ?? "一张表情";
+    agent.enqueue(`（${config.ownerTitle}发来一个表情：${sticker.name}，${detail}）`, undefined, quote);
+    onChange();
+    return { ok: true, message };
   }
 
   unread = 0;
@@ -365,6 +392,33 @@ app.delete("/api/reminders/:id", async (request) => {
   return { ok };
 });
 
+// ---------- avatar ----------
+
+app.get("/api/avatar/info", async () => avatarInfo(p));
+
+app.get("/api/avatar", async (_request, reply) => {
+  const avatar = avatarFile(p);
+  if (!avatar) return reply.code(404).send({ error: "还没有自定义头像。" });
+  return reply
+    .header("cache-control", "no-store")
+    .type(avatar.mime)
+    .send(fs.readFileSync(avatar.file));
+});
+
+app.post("/api/avatar", async (request, reply) => {
+  const body = requireObject(request.body);
+  const dataUrl = typeof body.dataUrl === "string" ? body.dataUrl : "";
+  if (!dataUrl) return reply.code(400).send({ error: "没有收到图片。" });
+  try {
+    const avatar = saveAvatar(p, dataUrl);
+    return { ok: true, avatar };
+  } catch (error) {
+    return reply.code(400).send({ error: error instanceof Error ? error.message : "头像保存失败。" });
+  }
+});
+
+app.delete("/api/avatar", async () => ({ ok: true, avatar: clearAvatar(p) }));
+
 // ---------- relationship, usage, stickers, debug ----------
 
 app.get("/api/relationship", async () => {
@@ -380,7 +434,7 @@ app.get("/api/relationship", async () => {
 app.get("/api/usage", async () => ({
   today: todayUsage(p, config),
   policy: costPolicy(config, todayUsage(p, config)),
-  pricing: peakInfo(Date.now(), config.behavior.timezone),
+  pricing: peakInfo(config, Date.now()),
   prices: MODEL_PRICES,
 }));
 
@@ -455,7 +509,7 @@ app.post("/api/test-model", async (request) => {
 app.get("/api/settings", async () => ({
   config: maskConfig(config),
   root,
-  pricing: peakInfo(Date.now(), config.behavior.timezone),
+  pricing: peakInfo(config, Date.now()),
   prices: MODEL_PRICES,
   modelOptions: [
     { value: "deepseek-flash", label: "DeepSeek Flash（便宜、快）" },
@@ -478,6 +532,8 @@ app.put("/api/settings", async (request, reply) => {
   if (!next.model.sideModel.trim()) next.model.sideModel = next.model.model;
   next.model.temperature = Math.max(0, Math.min(2, Number(next.model.temperature) || 1));
   next.cost.dailyBudgetCny = Math.max(0, Number(next.cost.dailyBudgetCny) || 0);
+  next.cost.peakPolicy = Boolean(next.cost.peakPolicy);
+  next.cost.peakWindows = normalizePeakWindows(next.cost.peakWindows);
   next.behavior.historyMessages = Math.max(4, Math.min(100, Number(next.behavior.historyMessages) || 40));
   next.behavior.historyPeakMessages = Math.max(4, Math.min(100, Number(next.behavior.historyPeakMessages) || 16));
   next.behavior.maxOutputTokens = Math.max(100, Math.min(4000, Number(next.behavior.maxOutputTokens) || 800));

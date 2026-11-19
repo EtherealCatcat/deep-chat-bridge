@@ -21,7 +21,13 @@ export interface ModelPrices {
   peak: Price;
 }
 
+export interface PeakWindow {
+  start: number;
+  end: number;
+}
+
 export interface PeakInfo {
+  enabled: boolean;
   isPeak: boolean;
   label: string;
   nextChangeAt: number;
@@ -30,6 +36,7 @@ export interface PeakInfo {
 }
 
 export interface CostPolicy {
+  peakEnabled: boolean;
   isPeak: boolean;
   peakLabel: string;
   nextChangeAt: number;
@@ -206,6 +213,22 @@ export interface ModelConfig {
   thinking: boolean;
 }
 
+export interface Sticker {
+  name: string;
+  emoji?: string;
+  file?: string;
+  desc?: string;
+  scene?: string;
+  addedAt: number;
+}
+
+export interface AvatarInfo {
+  custom: boolean;
+  url: string;
+  updatedAt: number;
+  mime?: string;
+}
+
 export interface AppConfig {
   name: string;
   ownerTitle: string;
@@ -242,7 +265,7 @@ export interface AppConfig {
     tellOwnerMaxPerDay: number;
   };
   mood: { enabled: boolean; base: number; halfLifeHours: number };
-  cost: { dailyBudgetCny: number; peakPolicy: boolean };
+  cost: { dailyBudgetCny: number; peakPolicy: boolean; peakWindows: PeakWindow[] };
   web: { enabled: boolean; ownTimeEnabled: boolean; rssFeeds: string[] };
   ui: { port: number };
 }

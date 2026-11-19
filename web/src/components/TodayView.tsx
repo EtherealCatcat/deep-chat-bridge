@@ -310,7 +310,13 @@ export function TodayView({ status, showToast }: { status: Status | null; showTo
               </div>
             </div>
             <div className="mt-3 flex items-center justify-between text-[10px] text-ink-faint">
-              <span>{status?.pricing.isPeak ? "现在忙时，她说话会更短" : "现在闲时，可以慢慢聊"}</span>
+              <span>
+                {!status?.pricing.peakEnabled
+                  ? "峰谷已关闭，全时段按闲时运行"
+                  : status.pricing.isPeak
+                    ? "现在忙时，她说话会更短"
+                    : "现在闲时，可以慢慢聊"}
+              </span>
               <span>{Math.round((status?.usage.costCny ?? 0) * 100)}%</span>
             </div>
           </Card>

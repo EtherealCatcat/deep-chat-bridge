@@ -37,7 +37,7 @@ export async function runToolLoop(options: LoopOptions): Promise<LoopResult> {
       signal,
     });
     content = result.content;
-    const peak = isPeak(Date.now(), config.behavior.timezone);
+    const peak = isPeak(config, Date.now());
     recordUsage(paths, config, {
       model: result.model,
       provider: config.model.provider,

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { LoaderCircle } from "lucide-react";
+import { useAvatar } from "../avatar";
 
 export function WhaleAvatar({
   size = "md",
@@ -8,6 +9,7 @@ export function WhaleAvatar({
   size?: "sm" | "md" | "lg" | "xl";
   className?: string;
 }) {
+  const avatar = useAvatar();
   const sizes = {
     sm: "h-8 w-8 text-[15px]",
     md: "h-10 w-10 text-[19px]",
@@ -19,7 +21,7 @@ export function WhaleAvatar({
       className={`relative shrink-0 overflow-visible rounded-full bg-gradient-to-br from-[#6f968e] via-[#527a73] to-[#365650] shadow-[inset_0_1px_1px_rgba(255,255,255,.28),0_5px_14px_rgba(53,83,77,.2)] ring-1 ring-white/40 ${sizes[size]} ${className}`}
       aria-hidden
     >
-      <img src="/avatar.png" alt="" className="h-full w-full rounded-full object-cover" draggable={false} />
+      <img src={avatar} alt="" className="h-full w-full rounded-full object-cover" draggable={false} />
       <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[#f6d9a8] ring-2 ring-[#f2e9dc]" />
     </div>
   );

@@ -1,5 +1,6 @@
 import type {
   AppConfig,
+  AvatarInfo,
   ChatMessage,
   DebugPayload,
   DiaryMeta,
@@ -7,6 +8,7 @@ import type {
   Relationship,
   Reminder,
   SettingsPayload,
+  Sticker,
   Status,
   TimelineEvent,
 } from "./types";
@@ -50,12 +52,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   status: () => request<Status>("/api/status"),
+  avatar: () => request<AvatarInfo>("/api/avatar/info"),
+  uploadAvatar: (dataUrl: string) =>
+    request<{ ok: boolean; avatar: AvatarInfo }>("/api/avatar", {
+      method: "POST",
+      body: JSON.stringify({ dataUrl }),
+    }),
+  resetAvatar: () => request<{ ok: boolean; avatar: AvatarInfo }>("/api/avatar", { method: "DELETE" }),
   messages: (limit = 120) => request<{ messages: ChatMessage[] }>(`/api/messages?limit=${limit}`),
   send: (text: string, quoteId?: string, image?: string) =>
     request<{ ok: boolean; message: ChatMessage }>("/api/messages", {
       method: "POST",
       body: JSON.stringify({ text, quoteId, image }),
     }),
+  sendSticker: (sticker: string, quoteId?: string) =>
+    request<{ ok: boolean; message: ChatMessage }>("/api/messages", {
+      method: "POST",
+      body: JSON.stringify({ sticker, quoteId }),
+    }),
+  stickers: () => request<{ stickers: Sticker[] }>("/api/stickers"),
   read: () => request<{ ok: boolean }>("/api/read", { method: "POST" }),
   ownSeen: () => request<{ ok: boolean }>("/api/own/seen", { method: "POST" }),
   stop: () => request<{ ok: boolean }>("/api/stop", { method: "POST" }),

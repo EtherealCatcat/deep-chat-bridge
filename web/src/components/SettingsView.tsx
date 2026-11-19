@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -8,13 +8,17 @@ import {
   FlaskConical,
   Gauge,
   Globe2,
+  ImagePlus,
   LoaderCircle,
   MessageCircleHeart,
   Moon,
+  Plus,
   Power,
+  RotateCcw,
   Save,
   Server,
   Settings2,
+  Trash2,
   Wallet,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
@@ -89,7 +93,15 @@ function PriceTable({ prices }: { prices: SettingsPayload["prices"] }) {
   );
 }
 
-export function SettingsView({ showToast }: { showToast: (text: string, kind?: "info" | "error") => void }) {
+export function SettingsView({
+  showToast,
+  avatar,
+  onAvatarChange,
+}: {
+  showToast: (text: string, kind?: "info" | "error") => void;
+  avatar: string;
+  onAvatarChange: (url: string) => void;
+}) {
   const [payload, setPayload] = useState<SettingsPayload | null>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [apiKey, setApiKey] = useState("");
@@ -99,6 +111,8 @@ export function SettingsView({ showToast }: { showToast: (text: string, kind?: "
   const [dirty, setDirty] = useState(false);
   const [autostart, setAutostartState] = useState(false);
   const [autostartBusy, setAutostartBusy] = useState(false);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const avatarRef = useRef<HTMLInputElement>(null);
 
   async function load() {
     try {
@@ -139,6 +153,22 @@ export function SettingsView({ showToast }: { showToast: (text: string, kind?: "
   const patchUi = (value: Partial<AppConfig["ui"]>) =>
     config && edit({ ...config, ui: { ...config.ui, ...value } });
 
+  function setPeakWindow(index: number, value: Partial<AppConfig["cost"]["peakWindows"][number]>) {
+    if (!config) return;
+    const windows = config.cost.peakWindows.map((row, i) => (i === index ? { ...row, ...value } : row));
+    patchCost({ peakWindows: windows });
+  }
+
+  function addPeakWindow() {
+    if (!config || config.cost.peakWindows.length >= 4) return;
+    patchCost({ peakWindows: [...config.cost.peakWindows, { start: 20 * 60, end: 22 * 60 }] });
+  }
+
+  function removePeakWindow(index: number) {
+    if (!config || config.cost.peakWindows.length <= 1) return;
+    patchCost({ peakWindows: config.cost.peakWindows.filter((_, i) => i !== index) });
+  }
+
   function effectiveConfig(): AppConfig | null {
     if (!config) return null;
     return {
@@ -175,6 +205,45 @@ export function SettingsView({ showToast }: { showToast: (text: string, kind?: "
       await invoke("open_logs");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "打不开日志目录。", "error");
+    }
+  }
+
+  async function changeAvatar(file: File | undefined) {
+    if (!file || avatarBusy) return;
+    if (file.size > 4 * 1024 * 1024) {
+      showToast("头像不要超过 4MB。", "error");
+      return;
+    }
+    setAvatarBusy(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () => reject(new Error("读取图片失败。"));
+        reader.readAsDataURL(file);
+      });
+      const result = await api.uploadAvatar(dataUrl);
+      onAvatarChange(result.avatar.url);
+      showToast("头像换好了。");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "头像保存失败。", "error");
+    } finally {
+      setAvatarBusy(false);
+      if (avatarRef.current) avatarRef.current.value = "";
+    }
+  }
+
+  async function resetAvatar() {
+    if (avatarBusy) return;
+    setAvatarBusy(true);
+    try {
+      const result = await api.resetAvatar();
+      onAvatarChange(result.avatar.url);
+      showToast("已恢复默认头像。");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "恢复失败。", "error");
+    } finally {
+      setAvatarBusy(false);
     }
   }
 
@@ -247,6 +316,53 @@ export function SettingsView({ showToast }: { showToast: (text: string, kind?: "
           </div>
         }
       />
+
+      <Card className="mb-5 p-5 sm:p-6">
+        <div className="mb-4 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+          <ImagePlus className="h-3 w-3" />
+          聊天头像
+        </div>
+        <div className="flex flex-wrap items-center gap-4">
+          <img
+            src={avatar}
+            alt="鲸鲸的头像"
+            className="h-20 w-20 rounded-2xl border border-line/60 bg-white/50 object-cover shadow-sm"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-[12px] font-medium text-ink">她在聊天里显示的样子</div>
+            <div className="mt-0.5 text-[10px] leading-4 text-ink-faint">
+              PNG / JPEG / WebP / GIF，方形最好，不超过 4MB；只影响你的界面，不会发给模型。
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <input
+                ref={avatarRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={(event) => void changeAvatar(event.target.files?.[0])}
+              />
+              <button
+                type="button"
+                onClick={() => avatarRef.current?.click()}
+                disabled={avatarBusy}
+                className="btn-ghost text-[10.5px]"
+              >
+                {avatarBusy ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <ImagePlus className="h-3 w-3" />}
+                更换头像
+              </button>
+              <button
+                type="button"
+                onClick={() => void resetAvatar()}
+                disabled={avatarBusy || avatar === "/avatar.png"}
+                className="btn-ghost text-[10.5px] disabled:opacity-40"
+              >
+                <RotateCcw className="h-3 w-3" />
+                恢复默认
+              </button>
+            </div>
+          </div>
+        </div>
+      </Card>
 
       <div className="grid gap-5 xl:grid-cols-2">
         <Card className="p-5 sm:p-6">
@@ -537,11 +653,15 @@ export function SettingsView({ showToast }: { showToast: (text: string, kind?: "
                 <div>
                   <div className="text-[11px] text-ink">{payload.pricing.label}</div>
                   <div className="text-[9.5px] text-ink-faint">
-                    下次切换 {formatTime(payload.pricing.nextChangeAt)} · {payload.pricing.peakWindow}
+                    {payload.pricing.enabled
+                      ? `下次切换 ${formatTime(payload.pricing.nextChangeAt)} · ${payload.pricing.peakWindow}`
+                      : "峰谷已关闭，全时段按闲时价格与额度运行"}
                   </div>
                 </div>
               </div>
-              <Badge tone={payload.pricing.isPeak ? "coral" : "sea"}>{payload.pricing.isPeak ? "高峰" : "空闲"}</Badge>
+              <Badge tone={!payload.pricing.enabled ? "sea" : payload.pricing.isPeak ? "coral" : "sea"}>
+                {!payload.pricing.enabled ? "已关闭" : payload.pricing.isPeak ? "高峰" : "空闲"}
+              </Badge>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Labeled label="每日预算" hint="元，0 = 不限">
@@ -558,14 +678,66 @@ export function SettingsView({ showToast }: { showToast: (text: string, kind?: "
                 <Toggle
                   checked={config.cost.peakPolicy}
                   onChange={(value) => patchCost({ peakPolicy: value })}
-                  label="峰谷降载"
-                  hint="高峰少说、少想"
+                  label="峰谷计费与降载"
+                  hint="关闭后全时段按闲时价格与额度运行"
                 />
               </div>
             </div>
+            {config.cost.peakPolicy ? (
+              <div className="rounded-xl border border-line/60 bg-white/35 px-3 py-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="inline-flex items-center gap-1.5 text-[11px] text-ink">
+                    <Clock className="h-3.5 w-3 text-gold" />
+                    高峰时段
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addPeakWindow}
+                    disabled={config.cost.peakWindows.length >= 4}
+                    className="inline-flex items-center gap-1 rounded-full border border-line/70 px-2 py-1 text-[10px] text-ink-soft transition hover:border-coral/40 hover:text-coral disabled:opacity-40"
+                  >
+                    <Plus className="h-3 w-3" />
+                    添加
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {config.cost.peakWindows.map((window, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <input
+                        type="time"
+                        value={minToClock(window.start)}
+                        onChange={(event) => setPeakWindow(index, { start: clockToMin(event.target.value) })}
+                        className="input-warm w-auto min-w-0 flex-1 px-2 py-1.5 text-[11px]"
+                      />
+                      <span className="text-ink-faint">–</span>
+                      <input
+                        type="time"
+                        value={minToClock(window.end)}
+                        onChange={(event) => setPeakWindow(index, { end: clockToMin(event.target.value) })}
+                        className="input-warm w-auto min-w-0 flex-1 px-2 py-1.5 text-[11px]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removePeakWindow(index)}
+                        disabled={config.cost.peakWindows.length <= 1}
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-faint transition hover:bg-coral/10 hover:text-coral disabled:opacity-30"
+                        title="删除这个时段"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-[9.5px] leading-4 text-ink-faint">
+                  按本地时间；结束早于开始表示跨午夜。法定节假日与周末仍按闲时。
+                </p>
+              </div>
+            ) : null}
             <PriceTable prices={payload.prices} />
             <p className="text-[9.5px] leading-4 text-ink-faint">
-              高峰：工作日 09:00–12:00、14:00–18:00（法定节假日除外）。表中为「空闲/高峰」元每百万 token。
+              {payload.pricing.enabled
+                ? `当前高峰：${payload.pricing.peakWindow}。表中为「空闲/高峰」元每百万 token。`
+                : "峰谷已关闭；表中为参考价，实际按「空闲」列计费。"}
             </p>
           </div>
         </Card>

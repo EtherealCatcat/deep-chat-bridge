@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG } from "../src/config.js";
-import { costPolicy, estimateCost, isPeak } from "../src/pricing.js";
+import { DEFAULT_PEAK_WINDOWS, costPolicy, estimateCost, isPeak, normalizePeakWindows } from "../src/pricing.js";
 import type { UsageDay } from "../src/types.js";
 
 const config = structuredClone(DEFAULT_CONFIG);
@@ -25,19 +25,19 @@ const emptyUsage: UsageDay = {
 
 describe("peak pricing", () => {
   it("treats weekday office hours as peak and lunch as off-peak", () => {
-    expect(isPeak(at("2026-11-18T10:00:00+08:00"))).toBe(true);
-    expect(isPeak(at("2026-11-18T13:00:00+08:00"))).toBe(false);
-    expect(isPeak(at("2026-11-18T15:00:00+08:00"))).toBe(true);
-    expect(isPeak(at("2026-11-18T19:00:00+08:00"))).toBe(false);
+    expect(isPeak(config, at("2026-11-18T10:00:00+08:00"))).toBe(true);
+    expect(isPeak(config, at("2026-11-18T13:00:00+08:00"))).toBe(false);
+    expect(isPeak(config, at("2026-11-18T15:00:00+08:00"))).toBe(true);
+    expect(isPeak(config, at("2026-11-18T19:00:00+08:00"))).toBe(false);
   });
 
   it("treats weekends and holidays as off-peak", () => {
-    expect(isPeak(at("2026-11-21T10:00:00+08:00"))).toBe(false);
-    expect(isPeak(at("2026-10-01T10:00:00+08:00"))).toBe(false);
+    expect(isPeak(config, at("2026-11-21T10:00:00+08:00"))).toBe(false);
+    expect(isPeak(config, at("2026-10-01T10:00:00+08:00"))).toBe(false);
   });
 
   it("counts make-up workdays as peak", () => {
-    expect(isPeak(at("2026-10-10T10:00:00+08:00"))).toBe(true);
+    expect(isPeak(config, at("2026-10-10T10:00:00+08:00"))).toBe(true);
   });
 
   it("shrinks the budget under peak pricing", () => {
@@ -48,6 +48,30 @@ describe("peak pricing", () => {
     expect(peak.historyMessages).toBeLessThan(off.historyMessages);
     expect(peak.allowProactive).toBe(false);
     expect(off.allowProactive).toBe(true);
+  });
+
+  it("supports custom peak windows and a master switch", () => {
+    const custom = structuredClone(config);
+    custom.cost.peakWindows = [{ start: 20 * 60, end: 22 * 60 }];
+    expect(isPeak(custom, at("2026-11-18T10:00:00+08:00"))).toBe(false);
+    expect(isPeak(custom, at("2026-11-18T21:00:00+08:00"))).toBe(true);
+
+    custom.cost.peakPolicy = false;
+    expect(isPeak(custom, at("2026-11-18T21:00:00+08:00"))).toBe(false);
+    const off = costPolicy(custom, emptyUsage, at("2026-11-18T21:00:00+08:00"));
+    expect(off.peakEnabled).toBe(false);
+    expect(off.isPeak).toBe(false);
+    expect(off.allowProactive).toBe(true);
+    expect(off.allowSideCalls).toBe(true);
+    expect(off.peakLabel).toBe("已关闭");
+  });
+
+  it("normalizes custom windows and falls back to defaults", () => {
+    expect(normalizePeakWindows([])).toEqual(DEFAULT_PEAK_WINDOWS);
+    expect(normalizePeakWindows([{ start: -10, end: 2000 }, { start: 600, end: 600 }])).toEqual([
+      { start: 0, end: 1439 },
+    ]);
+    expect(normalizePeakWindows([{ start: 100, end: 200 }, { start: 300, end: 400 }, { start: 500, end: 600 }, { start: 700, end: 800 }, { start: 900, end: 1000 }])).toHaveLength(4);
   });
 
   it("estimates cache hits cheaper than misses", () => {

@@ -1,14 +1,17 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { CheckCheck, Feather, ImagePlus, ListPlus, LoaderCircle, Quote, Send, Sparkles, X } from "lucide-react";
-import type { ChatMessage, QuoteRef, Status } from "../types";
-import { API_BASE, formatDay, formatTime } from "../api";
+import { CheckCheck, ChevronLeft, ChevronRight, Feather, ImagePlus, ListPlus, LoaderCircle, Quote, Send, Smile, Sparkles, X } from "lucide-react";
+import type { ChatMessage, QuoteRef, Status, Sticker } from "../types";
+import { API_BASE, api, formatDay, formatTime } from "../api";
 import { prepareImage, type PreparedImage } from "../image";
 import { WhaleAvatar } from "./ui";
+import { StickerImage } from "./StickerImage";
+import { useAvatar } from "../avatar";
 
 function MiniAvatar() {
+  const avatar = useAvatar();
   return (
     <img
-      src="/avatar.png"
+      src={avatar}
       alt=""
       draggable={false}
       className="mt-0.5 h-7 w-7 shrink-0 rounded-full bg-white/40 object-cover shadow-sm ring-1 ring-white/40"
@@ -57,6 +60,43 @@ function MessageRow({
   const proactive = Boolean(message.meta?.proactive);
 
   if (message.kind === "silent") return null;
+
+  if (message.role === "user" && message.kind === "sticker") {
+    const file = String(message.meta?.file ?? "");
+    return (
+      <div id={`msg-${message.id}`} className="fade-up group flex justify-end">
+        <div className="min-w-0 max-w-[62%]">
+          {message.quote ? <QuoteBlock quote={message.quote} /> : null}
+          {file ? (
+            <StickerImage
+              src={`${API_BASE}/stickers/${encodeURIComponent(file.replace(/^\/+/, ""))}`}
+              alt={message.text}
+              className="ml-auto max-h-40 max-w-[170px]"
+            />
+          ) : (
+            <div className="bubble-me">{message.text}</div>
+          )}
+          <div className="mt-1 flex items-center justify-end gap-1.5 pr-1 text-[10px] text-ink-faint">
+            <button
+              type="button"
+              onClick={() => onQuote(message)}
+              className="inline-flex items-center gap-0.5 text-[9.5px] opacity-0 transition hover:text-coral group-hover:opacity-100"
+            >
+              <Quote className="h-2.5 w-2.5" />
+              引用
+            </button>
+            <span>{formatTime(message.ts)}</span>
+            {showRead && readAt && readAt >= message.ts ? (
+              <span className="inline-flex items-center gap-0.5 text-sea/80">
+                <CheckCheck className="h-3 w-3" />
+                已读
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (message.role === "user" && message.kind === "image") {
     const file = String(message.meta?.file ?? "");
@@ -130,10 +170,10 @@ function MessageRow({
         <MiniAvatar />
         <div>
           {file ? (
-            <img
+            <StickerImage
               src={`${API_BASE}/stickers/${encodeURIComponent(file.replace(/^\/+/, ""))}`}
               alt={message.text}
-              className="max-h-44 max-w-[180px] rounded-[20px] border border-line/60 bg-white/55 shadow-sm"
+              className="max-h-44 max-w-[180px]"
             />
           ) : (
             <div className="grid h-20 w-20 place-items-center rounded-[20px] border border-line/60 bg-white/55 text-4xl shadow-sm">
@@ -230,17 +270,20 @@ function TypingBubble() {
 
 function PeakPill({ status }: { status: Status }) {
   const peak = status.pricing.isPeak;
+  const disabled = !status.pricing.peakEnabled;
   return (
     <div
       className={`hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] sm:inline-flex ${
-        peak
-          ? "border-gold/30 bg-gold/10 text-[#876529]"
-          : "border-sea/25 bg-sea/10 text-sea-deep"
+        disabled
+          ? "border-line/60 bg-ink/5 text-ink-faint"
+          : peak
+            ? "border-gold/30 bg-gold/10 text-[#876529]"
+            : "border-sea/25 bg-sea/10 text-sea-deep"
       }`}
-      title={`${status.pricing.reason} · 下次切换 ${formatTime(status.pricing.nextChangeAt)}`}
+      title={disabled ? "峰谷计费与降载已关闭" : `${status.pricing.reason} · 下次切换 ${formatTime(status.pricing.nextChangeAt)}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${peak ? "bg-gold" : "bg-sea"}`} />
-      {peak ? "忙时 · 说话简短" : "闲时"}
+      {disabled ? "峰谷关闭" : peak ? "忙时 · 说话简短" : "闲时"}
     </div>
   );
 }
@@ -251,6 +294,7 @@ export function ChatView({
   typing,
   readAt,
   onSend,
+  onSticker,
   onBurst,
   onNavigateSettings,
 }: {
@@ -259,6 +303,7 @@ export function ChatView({
   typing: boolean;
   readAt: number | null;
   onSend: (text: string, quote?: ChatMessage, image?: string) => Promise<void>;
+  onSticker: (name: string) => Promise<void>;
   onBurst: (active: boolean) => Promise<void>;
   onNavigateSettings: () => void;
 }) {
@@ -268,6 +313,11 @@ export function ChatView({
   const [preparing, setPreparing] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [stickerOpen, setStickerOpen] = useState(false);
+  const [stickers, setStickers] = useState<Sticker[]>([]);
+  const [stickerPage, setStickerPage] = useState(0);
+  const [stickerLoading, setStickerLoading] = useState(false);
+  const [stickerError, setStickerError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -284,6 +334,28 @@ export function ChatView({
   useEffect(() => {
     if (quote && !messages.some((m) => m.id === quote.id)) setQuote(null);
   }, [messages, quote]);
+
+  useEffect(() => {
+    if (!stickerOpen || stickers.length) return;
+    let cancelled = false;
+    setStickerLoading(true);
+    setStickerError(null);
+    void api
+      .stickers()
+      .then((result) => {
+        if (!cancelled) setStickers(result.stickers.filter((item) => Boolean(item.file)));
+      })
+      .catch((error) => {
+        if (!cancelled) setStickerError(error instanceof Error ? error.message : "表情加载失败。");
+      })
+      .finally(() => {
+        if (!cancelled) setStickerLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [stickerOpen, stickers.length]);
+
 
   useEffect(() => {
     stick.current = true;
@@ -338,15 +410,37 @@ export function ChatView({
     }
   }
 
+  async function chooseSticker(sticker: Sticker) {
+    if (!sticker.file || sending || preparing || burst) return;
+    setSending(true);
+    try {
+      await onSticker(sticker.name);
+      setStickerOpen(false);
+    } finally {
+      setSending(false);
+    }
+  }
+
   const asleep = status?.rhythm.phase === "asleep";
   const burst = Boolean(status?.burst);
   const burstCount = status?.burstCount ?? 0;
+  const stickerPageSize = 10;
+
+  useEffect(() => {
+    if (burst) setStickerOpen(false);
+  }, [burst]);
+  const stickerPageCount = Math.max(1, Math.ceil(stickers.length / stickerPageSize));
+  const stickerPageItems = stickers.slice(stickerPage * stickerPageSize, (stickerPage + 1) * stickerPageSize);
 
   async function finishBurst() {
     if (sending || preparing) return;
     if (text.trim() || image) await submit();
     await onBurst(false);
   }
+
+  useEffect(() => {
+    if (stickerPage >= stickerPageCount) setStickerPage(stickerPageCount - 1);
+  }, [stickerPage, stickerPageCount]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -507,6 +601,79 @@ export function ChatView({
               </button>
             </div>
           ) : null}
+          {stickerOpen ? (
+            <div className="mb-2 rounded-2xl border border-line/70 bg-[rgba(255,252,247,0.92)] p-3 shadow-[0_8px_24px_rgba(82,61,42,.06)]">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="inline-flex items-center gap-1.5 text-[11px] font-medium text-ink">
+                  <Smile className="h-3.5 w-3.5 text-coral" />
+                  表情
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStickerOpen(false)}
+                  className="grid h-6 w-6 place-items-center rounded-full text-ink-faint transition hover:bg-white/80 hover:text-coral"
+                  title="收起表情"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+              {stickerLoading ? (
+                <div className="flex h-32 items-center justify-center text-[11px] text-ink-faint">
+                  <LoaderCircle className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  正在翻表情包…
+                </div>
+              ) : stickerError ? (
+                <div className="rounded-lg border border-coral/20 bg-coral/5 px-3 py-2 text-[10.5px] text-coral-deep">
+                  {stickerError}
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {stickerPageItems.map((sticker) => (
+                      <button
+                        key={sticker.name}
+                        type="button"
+                        onClick={() => void chooseSticker(sticker)}
+                        disabled={sending || preparing}
+                        className="group/sticker grid aspect-square place-items-center rounded-xl border border-transparent p-1 transition hover:border-coral/25 hover:bg-white/70 disabled:opacity-40"
+                        title={`${sticker.name}${sticker.desc ? ` · ${sticker.desc}` : ""}`}
+                      >
+                        <StickerImage
+                          src={`${API_BASE}/stickers/${encodeURIComponent(String(sticker.file).replace(/^\/+/, ""))}`}
+                          alt={sticker.name}
+                          className="h-full w-full object-contain"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 text-[9.5px] text-ink-faint">
+                    <button
+                      type="button"
+                      onClick={() => setStickerPage((value) => Math.max(0, value - 1))}
+                      disabled={stickerPage <= 0}
+                      className="grid h-6 w-6 place-items-center rounded-full transition hover:bg-white/80 hover:text-coral disabled:opacity-30"
+                      title="上一页"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="tabular-nums">
+                      第 {stickerPage + 1} / {stickerPageCount} 页
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setStickerPage((value) => Math.min(stickerPageCount - 1, value + 1))}
+                      disabled={stickerPage >= stickerPageCount - 1}
+                      className="grid h-6 w-6 place-items-center rounded-full transition hover:bg-white/80 hover:text-coral disabled:opacity-30"
+                      title="下一页"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="ml-auto">共 {stickers.length} 个 · 表情来源：ming</span>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
           <div className="flex items-end gap-2 rounded-[20px] border border-line/80 bg-[rgba(255,252,247,0.82)] p-1.5 pl-2 shadow-[0_8px_26px_rgba(82,61,42,.05)] transition focus-within:border-coral/40 focus-within:shadow-[0_0_0_3px_rgba(207,114,87,.08)]">
             <input
               ref={fileRef}
@@ -548,8 +715,9 @@ export function ChatView({
                 el.style.height = `${Math.min(el.scrollHeight, 150)}px`;
               }}
               onKeyDown={(event) => {
-                if (event.key === "Escape" && quote) {
+                if (event.key === "Escape" && (quote || stickerOpen)) {
                   setQuote(null);
+                  setStickerOpen(false);
                   return;
                 }
                 if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -560,6 +728,19 @@ export function ChatView({
               placeholder={burst ? "继续发…她还没收到" : asleep ? "她睡着了，留言会等到早上…" : "和鲸鲸说点什么…"}
               className="max-h-[150px] min-h-[38px] flex-1 resize-none bg-transparent py-2 text-[14.5px] leading-6 text-ink outline-none placeholder:text-ink-faint/80"
             />
+            <button
+              type="button"
+              onClick={() => setStickerOpen((value) => !value)}
+              disabled={sending || preparing || burst}
+              className={`mb-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full transition disabled:opacity-40 ${
+                stickerOpen ? "bg-coral/15 text-coral-deep" : "text-ink-faint hover:bg-white/70 hover:text-coral"
+              }`}
+              title={burst ? "连发时先只发文字" : stickerOpen ? "收起表情" : "发一个表情"}
+              aria-label="表情"
+              aria-expanded={stickerOpen}
+            >
+              <Smile className="h-4 w-4" />
+            </button>
             <button
               type="button"
               onClick={() => void submit()}

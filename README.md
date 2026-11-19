@@ -16,7 +16,8 @@
 - **有自己的时间**：会按闲时窗口自己待一会儿，翻笔记、读 RSS 或网页，偶尔主动分享。
 - **会引用**：聊天里可以引用某条消息；她也学会引用你的话，气泡上方会显示她引的是哪句。
 - **会看图**：你可以发图片给她；她通过 DeepSeek 原生视觉看懂当前这张图，历史里只留「[图片]」。
-- **有表情**：内置一套大肥鱼表情，她会按语境发图，不只是 emoji。
+- **有表情**：内置一套大肥鱼表情，她会按语境发图；你也可以从输入框的表情抽屉里发，她收到的是表情描述，不是图片。
+- **可换头像**：设置页「聊天头像」可以上传 PNG/JPEG/WebP（≤4MB）或恢复默认；只影响界面，不会发给模型。
 - **今天页**：聊天记录按 30 分钟合并，电脑睡眠只留诊断，不刷屏。
 - **有边界**：她没有 shell、不能写文件、不能改自己的人设；能做的只有你给她的工具。
 
@@ -69,7 +70,7 @@ npm run tauri:build:p5    # .app + .dmg
 
 ```
 src-tauri/target/release/bundle/macos/DeepHome.app
-src-tauri/target/release/bundle/dmg/DeepHome_0.2.0_aarch64.dmg
+src-tauri/target/release/bundle/dmg/DeepHome_0.3.0_aarch64.dmg
 ```
 
 应用启动时会：
@@ -84,7 +85,7 @@ cp -R ~/.chatbridge ~/.chatbridge.backup
 cp -R data/. ~/.chatbridge/
 ```
 
-图标：`使用 src-tauri/icons-app/`。两套图标的原始设计图不随仓库分发，生成后的图标目录在仓库里。此外，`web/public/avatar.png` 是聊天头像。
+应用图标：`src-tauri/icons-app/` 用于 `.app`/`.dmg`，开发期 `src-tauri/icons/` 使用另一套；原始设计图不随仓库分发，生成后的图标目录在仓库里。`web/public/avatar.png` 是默认聊天头像，可在设置页替换。
 
 ### 后台常驻与 Menu Bar
 
@@ -144,7 +145,7 @@ npm run tauri:dev
 
 ## 峰谷计费
 
-DeepSeek 的高峰时段是**北京时间工作日 09:00–12:00、14:00–18:00**，法定节假日除外；其余时间空闲价约为高峰的 50%。
+DeepSeek 的高峰时段默认是**北京时间工作日 09:00–12:00、14:00–18:00**，法定节假日除外；其余时间空闲价约为高峰的 50%。设置页可以关闭整个峰谷功能，或改成自己的时段（最多 4 段）；关闭后全时段按闲时计费，也不再做峰时降载。
 
 她会在高峰时自动降载：
 
@@ -191,8 +192,11 @@ DeepSeek 的高峰时段是**北京时间工作日 09:00–12:00、14:00–18:00
 - 图片只用于当前这一轮：她看到的是原图；历史里只保留「[图片]」和当时的话，避免每轮重发。
 - 需要 `deepseek-flash` 或支持 `image_url` 的 OpenAI 兼容模型；`deepseek-v4-pro` 也支持。
 - 100 张大肥鱼静态表情在 `assets/stickers/`（512 PNG 转为 WebP），首次启动会复制到 `~/.chatbridge/stickers/`，并合并进 `index.json`。
+- 用户发表情：输入框发送键左侧的「表情」按钮打开抽屉，5 列 × 2 行一页，共 10 页；点选即发送。抽屉和气泡都会在浏览器里做边缘去白处理，尽量贴合纸色背景。
+- 你发的是表情，她收到的是一句描述（例如「主人发来一个表情：啊这，斜眼看你，表示无语」），历史里同样保留描述，不会把图片塞进上下文。
 - 表情来源：用户提供的 **大肥鱼日常表情包 v004**（2026-10-25）；基础鲸鱼娘上善无形，DeepSeek 女仆设计 ZipZipPipe，本套 ming。CC BY-NC-SA 4.0，非商业；只使用静态图，不使用 GIF。头像由大肥鱼 Q 版立绘裁切而来。
-- 想换头像：替换 `web/public/avatar.png` 后重新 `npm run build:web`；想加表情：把 webp 放进 `assets/stickers/` 并在 `pack.json` 里加一条，或直接改 `~/.chatbridge/stickers/index.json`。
+- 换头像：设置页「聊天头像」→「更换头像」，选 PNG/JPEG/WebP/GIF（≤4MB）；自定义图存到 `~/.chatbridge/media/avatar-*`，点「恢复默认」回到 `web/public/avatar.png`。
+- 想加表情：把 webp 放进 `assets/stickers/` 并在 `pack.json` 里加一条，或直接改 `~/.chatbridge/stickers/index.json`。
 
 ## 开机自启、通知与日志
 

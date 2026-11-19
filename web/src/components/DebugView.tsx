@@ -166,8 +166,8 @@ export function DebugView({ showToast }: { showToast: (text: string, kind?: "inf
             {data.usage.calls} 次调用 · {data.usage.promptTokens + data.usage.completionTokens} token
           </div>
           <div className="mt-2">
-            <Badge tone={data.status.pricing.isPeak ? "coral" : "sea"}>
-              {data.status.pricing.isPeak ? "高峰" : "空闲"} · {data.status.pricing.budgetState}
+            <Badge tone={data.status.pricing.peakEnabled ? data.status.pricing.isPeak ? "coral" : "sea" : "sea"}>
+              {!data.status.pricing.peakEnabled ? "峰谷关闭" : data.status.pricing.isPeak ? "高峰" : "空闲"} · {data.status.pricing.budgetState}
             </Badge>
           </div>
         </Card>

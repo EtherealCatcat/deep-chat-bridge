@@ -39,13 +39,13 @@ describe("quoted messages", () => {
         role: "assistant",
         kind: "sticker",
         text: "不服气",
-        meta: { file: "001-不服气.webp" },
+        meta: { file: "001-不服气.webp", desc: "斜眼看你，表示无语" },
         dayKey: "2026-11-18",
       },
     ];
     const history = toLLMHistory(messages, 10, config);
     expect(history[0].content).toContain("[图片：看看这个]");
-    expect(history[1].content).toContain("[表情:不服气]");
+    expect(history[1].content).toContain("[表情:不服气（斜眼看你，表示无语）]");
   });
 
   it("prepends quote lines to LLM history", () => {

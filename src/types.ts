@@ -87,9 +87,17 @@ export interface MoodConfig {
   halfLifeHours: number;
 }
 
+export interface PeakWindow {
+  /** 本地时间，分钟数，0–1439；start > end 表示跨午夜。 */
+  start: number;
+  end: number;
+}
+
 export interface CostConfig {
   dailyBudgetCny: number;
+  /** 峰谷计费与降载总开关。 */
   peakPolicy: boolean;
+  peakWindows: PeakWindow[];
 }
 
 export interface WebConfig {

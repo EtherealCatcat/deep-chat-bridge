@@ -513,7 +513,7 @@ ${body}` },
         completionTokens: result.usage.completion_tokens,
         cacheHitTokens: result.usage.prompt_cache_hit_tokens,
         cacheMissTokens: result.usage.prompt_cache_miss_tokens,
-        peak: isPeak(Date.now(), config.behavior.timezone),
+        peak: isPeak(config, Date.now()),
         kind: "style-retry",
       });
       return result.content.trim() || raw;
@@ -567,7 +567,13 @@ ${body}` },
       role: "assistant",
       kind: "sticker",
       text: sticker?.name ?? name,
-      meta: { ...(sticker?.emoji ? { emoji: sticker.emoji } : {}), ...(sticker?.file ? { file: sticker.file } : {}), proactive },
+      meta: {
+        ...(sticker?.emoji ? { emoji: sticker.emoji } : {}),
+        ...(sticker?.file ? { file: sticker.file } : {}),
+        ...(sticker?.desc ? { desc: sticker.desc } : {}),
+        ...(sticker?.scene ? { scene: sticker.scene } : {}),
+        proactive,
+      },
       quote,
     });
     await this.emitTyping(false, 250);
@@ -618,7 +624,7 @@ ${body}` },
           completionTokens: result.usage.completion_tokens,
           cacheHitTokens: result.usage.prompt_cache_hit_tokens,
           cacheMissTokens: result.usage.prompt_cache_miss_tokens,
-          peak: isPeak(Date.now(), config.behavior.timezone),
+          peak: isPeak(config, Date.now()),
           kind: "mood",
         });
         const parsed = safeJson(result.content);

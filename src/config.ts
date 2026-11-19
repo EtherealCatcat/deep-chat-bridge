@@ -120,6 +120,10 @@ export const DEFAULT_CONFIG: AppConfig = {
   cost: {
     dailyBudgetCny: 5,
     peakPolicy: true,
+    peakWindows: [
+      { start: 9 * 60, end: 12 * 60 },
+      { start: 14 * 60, end: 18 * 60 },
+    ],
   },
   web: {
     enabled: true,

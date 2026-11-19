@@ -14,6 +14,84 @@ use tauri::{
   AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry,
 };
 
+// macOS 原生通知通道：绕开已废弃的 NSUserNotificationCenter，
+// 让 App 在前台时也能弹横幅（见 src/mac_notify.m）。
+#[cfg(target_os = "macos")]
+mod mac_notify {
+  use std::{
+    ffi::CString,
+    os::raw::{c_char, c_int},
+    sync::OnceLock,
+  };
+  use tauri::{AppHandle, Emitter};
+
+  unsafe extern "C" {
+    fn dh_notify_supported() -> c_int;
+    fn dh_notify_init(callback: extern "C" fn());
+    fn dh_notify(title: *const c_char, body: *const c_char, sound: c_int);
+  }
+
+  static APP: OnceLock<AppHandle> = OnceLock::new();
+
+  extern "C" fn on_notification_click() {
+    if let Some(app) = APP.get() {
+      let _ = app.emit("notification-clicked", ());
+    }
+  }
+
+  pub fn supported() -> bool {
+    unsafe { dh_notify_supported() != 0 }
+  }
+
+  pub fn init(app: AppHandle) {
+    let _ = APP.set(app);
+    if !supported() {
+      return;
+    }
+    unsafe { dh_notify_init(on_notification_click) };
+  }
+
+  pub fn send(title: &str, body: &str, sound: bool) -> bool {
+    if !supported() {
+      return false;
+    }
+    let (Ok(title), Ok(body)) = (CString::new(title), CString::new(body)) else {
+      return false;
+    };
+    unsafe { dh_notify(title.as_ptr(), body.as_ptr(), if sound { 1 } else { 0 }) };
+    true
+  }
+}
+
+#[tauri::command]
+fn notify_supported() -> bool {
+  #[cfg(target_os = "macos")]
+  {
+    mac_notify::supported()
+  }
+  #[cfg(not(target_os = "macos"))]
+  {
+    false
+  }
+}
+
+#[tauri::command]
+fn notify_native(title: String, body: String, sound: Option<bool>) -> Result<(), String> {
+  #[cfg(target_os = "macos")]
+  {
+    if mac_notify::send(&title, &body, sound.unwrap_or(true)) {
+      Ok(())
+    } else {
+      Err("原生通知通道不可用".to_string())
+    }
+  }
+  #[cfg(not(target_os = "macos"))]
+  {
+    let _ = (title, body, sound);
+    Err("当前平台不支持原生通知通道".to_string())
+  }
+}
+
 struct ServerState {
   port: u16,
   child: Mutex<Option<Child>>,
@@ -254,13 +332,29 @@ pub fn run() {
         }
       });
 
+      #[cfg(target_os = "macos")]
+      {
+        mac_notify::init(app.handle().clone());
+
+        // 调试用：`DeepHome.app/Contents/MacOS/app --notify-test` 启动后 5 秒发一条自检通知，
+        // 用来确认 App 在前台时横幅能正常弹出。
+        if std::env::args().any(|arg| arg == "--notify-test") {
+          std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_secs(5));
+            mac_notify::send("鲸鲸", "通知自检：这条应该从右上角弹出来。", true);
+          });
+        }
+      }
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
       server_port,
       focus_main,
       open_logs,
-      update_tray
+      update_tray,
+      notify_supported,
+      notify_native
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")

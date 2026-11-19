@@ -57,6 +57,7 @@ export const api = {
       body: JSON.stringify({ text, quoteId, image }),
     }),
   read: () => request<{ ok: boolean }>("/api/read", { method: "POST" }),
+  ownSeen: () => request<{ ok: boolean }>("/api/own/seen", { method: "POST" }),
   stop: () => request<{ ok: boolean }>("/api/stop", { method: "POST" }),
   burst: () => request<{ active: boolean; count: number }>("/api/burst"),
   setBurst: (active: boolean) =>

@@ -108,7 +108,7 @@ export interface AppConfig {
   mood: MoodConfig;
   cost: CostConfig;
   web: WebConfig;
-  ui: { port: number };
+  ui: { port: number; trayIconStyle: "template" | "outline" | "grayscale" };
 }
 
 export interface QuoteRef {
@@ -140,6 +140,7 @@ export interface OwnTimeState {
   lastWindowKey: string;
   lastRunAt: number;
   lastResult: string;
+  unread: number;
   shareDay: string;
   shareCount: number;
   pendingShares: string[];

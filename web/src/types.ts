@@ -130,6 +130,7 @@ export interface Status {
     windowEnd: number;
     label: string;
     lastResult: string;
+    unread: number;
   };
 }
 
@@ -243,7 +244,7 @@ export interface AppConfig {
   mood: { enabled: boolean; base: number; halfLifeHours: number };
   cost: { dailyBudgetCny: number; peakPolicy: boolean };
   web: { enabled: boolean; ownTimeEnabled: boolean; rssFeeds: string[] };
-  ui: { port: number };
+  ui: { port: number; trayIconStyle: "template" | "outline" | "grayscale" };
 }
 
 export interface SettingsPayload {

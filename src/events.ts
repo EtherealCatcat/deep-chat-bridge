@@ -39,6 +39,7 @@ export interface StatusSnapshot {
     windowEnd: number;
     label: string;
     lastResult: string;
+    unread: number;
   };
 }
 

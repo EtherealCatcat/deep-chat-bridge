@@ -21,6 +21,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { api, clockToMin, formatTime, isTauri, minToClock } from "../api";
 import { getAutostart, setAutostart } from "../autostart";
 import { sendTestNotification } from "../notify";
+import { applyTrayStyle } from "../tray";
 import type { AppConfig, SettingsPayload } from "../types";
 import { Badge, Card, Labeled, Loading, SectionTitle } from "./ui";
 
@@ -107,6 +108,7 @@ export function SettingsView({ showToast }: { showToast: (text: string, kind?: "
       setConfig(data.config);
       setApiKey("");
       setDirty(false);
+      void applyTrayStyle(data.config.ui.trayIconStyle).catch(() => undefined);
     } catch (error) {
       showToast(error instanceof Error ? error.message : "读取设置失败。", "error");
     }
@@ -657,6 +659,23 @@ export function SettingsView({ showToast }: { showToast: (text: string, kind?: "
               <Badge>桌面应用</Badge>
             )}
           </div>
+        </div>
+        <div className="mt-4">
+          <Labeled label="Menu Bar 图标（临时）" hint="自动跟随 macOS 深浅色；若菜单栏没看到图标，去 系统设置 → 菜单栏 允许 DeepHome。定版后只保留一套">
+            <select
+              value={config.ui.trayIconStyle}
+              onChange={(event) => {
+                const style = event.target.value as AppConfig["ui"]["trayIconStyle"];
+                patchUi({ trayIconStyle: style });
+                void applyTrayStyle(style).catch(() => undefined);
+              }}
+              className="input-warm"
+            >
+              <option value="template">模板镂空（推荐）</option>
+              <option value="outline">粗描边</option>
+              <option value="grayscale">黑白灰</option>
+            </select>
+          </Labeled>
         </div>
       </Card>
 

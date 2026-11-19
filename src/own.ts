@@ -33,6 +33,7 @@ export function defaultOwnTimeState(): OwnTimeState {
     lastWindowKey: "",
     lastRunAt: 0,
     lastResult: "",
+    unread: 0,
     shareDay: "",
     shareCount: 0,
     pendingShares: [],
@@ -163,6 +164,7 @@ export function markOwnEnd(state: OwnTimeState, now: number, result: string): vo
   state.activeUntil = 0;
   state.lastRunAt = now;
   state.lastResult = result.replace(/\s+/g, " ").trim().slice(0, 320);
+  if (state.lastResult) state.unread = (state.unread ?? 0) + 1;
   state.nextAt = 0;
   state.windowEnd = 0;
   state.windowKey = "";
@@ -210,7 +212,13 @@ export function ownStateSnapshot(state: OwnTimeState, config: AppConfig, now: nu
     windowEnd: state.windowEnd,
     label: ownLabel(state, now, config.behavior.timezone),
     lastResult: state.lastResult,
+    unread: state.unread ?? 0,
   };
+}
+
+export function markOwnSeen(state: OwnTimeState): void {
+  state.unread = 0;
+  state.updatedAt = Date.now();
 }
 
 export function nextOwnWindowLabel(config: AppConfig, now: number, state: OwnTimeState): string {

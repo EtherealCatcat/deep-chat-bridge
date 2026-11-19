@@ -23,7 +23,7 @@ import { todayUsage } from "./usage.js";
 import { MODEL_PRICES, costPolicy, peakInfo } from "./pricing.js";
 import { callLLM } from "./llm.js";
 import { listStickers } from "./stickers.js";
-import { loadOwn, ownStateSnapshot } from "./own.js";
+import { loadOwn, markOwnSeen, ownStateSnapshot, saveOwn } from "./own.js";
 import { readOwnLog } from "./web.js";
 import { backupFile, exists, readText, writeText } from "./store.js";
 import { dayKey, formatClock, weekdayCN } from "./time.js";
@@ -48,8 +48,11 @@ const clients = new Set<NodeJS.WritableStream & { write: (chunk: string) => bool
 let unread = 0;
 
 function emit(event: ServerEvent): void {
-  if (event.type === "message" && event.message.role === "assistant" && clients.size === 0) {
+  if (event.type === "message" && event.message.role === "assistant") {
     unread += 1;
+    broadcast(event);
+    onChange();
+    return;
   }
   broadcast(event);
 }
@@ -191,11 +194,13 @@ app.post("/api/messages", async (request, reply) => {
   updateStreak(p, config);
   emit({ type: "message", message });
   agent.enqueue(text || "（发来一张图片，看看是什么。）", undefined, quote, imageInfo);
+  onChange();
   return { ok: true, message };
 });
 
 app.post("/api/read", async () => {
   unread = 0;
+  onChange();
   return { ok: true };
 });
 
@@ -391,6 +396,14 @@ app.get("/api/own", async () => {
   };
 });
 
+app.post("/api/own/seen", async () => {
+  const state = loadOwn(p);
+  markOwnSeen(state);
+  saveOwn(p, state);
+  onChange();
+  return { ok: true };
+});
+
 app.get("/api/own/log", async (request, reply) => {
   const query = request.query as { day?: string };
   const raw = String(query.day ?? "").trim();
@@ -475,6 +488,7 @@ app.put("/api/settings", async (request, reply) => {
   next.web.ownTimeEnabled = Boolean(next.web.ownTimeEnabled);
   if (!Array.isArray(next.web.rssFeeds)) next.web.rssFeeds = [];
   next.web.rssFeeds = next.web.rssFeeds.filter((item): item is string => typeof item === "string" && item.startsWith("http"));
+  if (!["template", "outline", "grayscale"].includes(next.ui.trayIconStyle)) next.ui.trayIconStyle = "template";
 
   saveConfig(p, next);
   config = next;

@@ -126,7 +126,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     ownTimeEnabled: true,
     rssFeeds: ["https://sspai.com/feed", "https://hnrss.org/frontpage"],
   },
-  ui: { port: 7788 },
+  ui: { port: 7788, trayIconStyle: "template" },
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, X } from "lucide-react";
-import { API_BASE, api } from "./api";
+import { API_BASE, api, isTauri } from "./api";
+import { applyTrayStyle } from "./tray";
 import { initNotifications, notifyMessage } from "./notify";
 import type { ChatMessage, Page, ServerEvent, Status } from "./types";
 import { Sidebar } from "./components/Sidebar";
@@ -68,6 +69,46 @@ export default function App() {
   useEffect(() => {
     void initNotifications();
   }, []);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    void api
+      .settings()
+      .then((data) => applyTrayStyle(data.config.ui.trayIconStyle))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!isTauri() || !status) return;
+    void import("@tauri-apps/api/core")
+      .then(({ invoke }) =>
+        invoke("update_tray", {
+          unread: status.unread,
+          own: status.own?.unread ?? 0,
+          label: status.own?.lastResult ?? "",
+        }),
+      )
+      .catch(() => undefined);
+  }, [status?.unread, status?.own?.unread, status?.own?.lastResult]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen<string>("navigate", (event) => {
+          const next = event.payload.replace(/^#/, "") as Page;
+          if (!pages.includes(next)) return;
+          setPage(next);
+          if (next === "chat") void markRead();
+        }),
+      )
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => undefined);
+    return () => unlisten?.();
+  }, [markRead, setPage]);
 
   useEffect(() => {
     let alive = true;
@@ -159,6 +200,29 @@ export default function App() {
     const timer = window.setTimeout(() => void markRead(), 420);
     return () => window.clearTimeout(timer);
   }, [page, messages.length, markRead]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && pageRef.current === "chat") void markRead();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [markRead]);
+
+  useEffect(() => {
+    if (page !== "today" || document.visibilityState !== "visible") return;
+    if (!status?.own?.unread) return;
+    void api
+      .ownSeen()
+      .then(() =>
+        setStatus((prev) => (prev ? { ...prev, own: { ...prev.own, unread: 0 } } : prev)),
+      )
+      .catch(() => undefined);
+  }, [page, status?.own?.unread]);
 
   async function send(text: string, quote?: ChatMessage, image?: string) {
     const trimmed = text.trim();

@@ -88,6 +88,14 @@ cp -R data/. ~/.chatbridge/
 
 图标：`.app` / `.dmg` 使用 `src-tauri/icons-app/`（源图 `APPicon.webp`），开发期的 `src-tauri/icons/` 使用 `base.webp`。`web/public/avatar.png` 是聊天头像，不跟应用图标混用。
 
+### 后台常驻与 Menu Bar
+
+- 关闭主窗口只是把窗口藏起来，DeepHome 和 sidecar 继续运行；点 Dock 图标或菜单栏图标可以重新打开。
+- 菜单栏菜单：新消息数、自己的活动、查看日记、查看成长、转到设置、退出。退出会同时结束 sidecar。
+- macOS 26（Tahoe）及以后会把新应用图标默认放进菜单栏的隐藏区。第一次启动如果没看到鱼图标，去「系统设置 → 菜单栏」找到 DeepHome，设为在菜单栏中显示；设置页也有同样的提示。
+- 设置页「这台电脑」里有一个临时的「Menu Bar 图标」选项：模板镂空 / 粗描边 / 黑白灰；会自动跟随 macOS 深色/浅色。定版后只保留选择好的那一套，并移除这个临时选项。
+- 强制退出：`Cmd+Q`，或菜单栏「退出」；两者都会走 `RunEvent::Exit` 结束 sidecar。
+
 **未签名分发说明**：没有加入 Apple Developer Program，`.app` / `.dmg` 是 ad-hoc 签名、未公证。小范围分发时让对方右键「打开」，或执行：
 
 ```bash

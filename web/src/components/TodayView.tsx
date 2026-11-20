@@ -73,8 +73,10 @@ function EventRow({ event }: { event: TimelineEvent }) {
       </div>
       <div className="min-w-0 flex-1 pt-0.5">
         <div className="flex items-baseline gap-2">
-          <span className="tabular text-[10.5px] text-ink-faint">{formatTime(event.ts)}</span>
-          <span className="truncate text-[12.5px] text-ink">{event.text}</span>
+          <span className="tabular shrink-0 text-[10.5px] text-ink-faint">{formatTime(event.ts)}</span>
+          <span className="line-clamp-2 break-words text-[12.5px] text-ink" title={event.text}>
+            {event.text}
+          </span>
         </div>
         {event.meta && Object.keys(event.meta).length > 0 ? (
           <div className="mt-0.5 truncate text-[10px] text-ink-faint">
@@ -251,8 +253,8 @@ export function TodayView({ status, showToast }: { status: Status | null; showTo
         }
       />
 
-      <div className="grid gap-5 lg:grid-cols-[1.55fr_1fr]">
-        <Card className="p-5 sm:p-6">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+        <Card className="min-w-0 p-5 sm:p-6">
           <div className="mb-5 flex items-center justify-between">
             <h3 className="serif text-[17px] text-ink">今天发生的事</h3>
             <Badge tone="sea">
@@ -281,7 +283,7 @@ export function TodayView({ status, showToast }: { status: Status | null; showTo
           )}
         </Card>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <MoodCard status={status ?? emptyMoodStatus} />
 
           {status ? <OwnCard status={status} /> : null}

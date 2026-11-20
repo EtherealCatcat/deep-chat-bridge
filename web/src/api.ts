@@ -25,6 +25,15 @@ export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+/** 把服务端返回的相对资源路径解析成当前运行时可用的地址。 */
+export function assetUrl(url: string): string {
+  if (!url) return url;
+  if (/^(https?:|data:|blob:)/.test(url)) return url;
+  if (url.startsWith("/api/")) return `${API_BASE}${url}`;
+  // /avatar.png 这类前端打包资源仍按页面相对路径解析。
+  return url;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,

@@ -20,7 +20,7 @@ import {
   Trash2,
   Wallet,
 } from "lucide-react";
-import { api, clockToMin, formatTime, minToClock } from "../api";
+import { api, assetUrl, clockToMin, formatTime, minToClock } from "../api";
 import { getAutostart, setAutostart } from "../autostart";
 import { initNotifications, setNotificationsEnabled } from "../notify";
 import type { AppConfig, SettingsPayload } from "../types";
@@ -94,11 +94,13 @@ function PriceTable({ prices }: { prices: SettingsPayload["prices"] }) {
 export function SettingsView({
   showToast,
   avatar,
+  avatarCustom,
   onAvatarChange,
 }: {
   showToast: (text: string, kind?: "info" | "error") => void;
   avatar: string;
-  onAvatarChange: (url: string) => void;
+  avatarCustom: boolean;
+  onAvatarChange: (url: string, custom: boolean) => void;
 }) {
   const [payload, setPayload] = useState<SettingsPayload | null>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -206,7 +208,7 @@ export function SettingsView({
         reader.readAsDataURL(file);
       });
       const result = await api.uploadAvatar(dataUrl);
-      onAvatarChange(result.avatar.url);
+      onAvatarChange(assetUrl(result.avatar.url), result.avatar.custom);
       showToast("头像换好了。");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "头像保存失败。", "error");
@@ -221,7 +223,7 @@ export function SettingsView({
     setAvatarBusy(true);
     try {
       const result = await api.resetAvatar();
-      onAvatarChange(result.avatar.url);
+      onAvatarChange(assetUrl(result.avatar.url), result.avatar.custom);
       showToast("已恢复默认头像。");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "恢复失败。", "error");
@@ -340,7 +342,7 @@ export function SettingsView({
               <button
                 type="button"
                 onClick={() => void resetAvatar()}
-                disabled={avatarBusy || avatar === "/avatar.png"}
+                disabled={avatarBusy || !avatarCustom}
                 className="btn-ghost text-[10.5px] disabled:opacity-40"
               >
                 <RotateCcw className="h-3 w-3" />

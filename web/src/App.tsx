@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, X } from "lucide-react";
-import { API_BASE, api, isTauri } from "./api";
+import { API_BASE, api, assetUrl, isTauri } from "./api";
 import { initNotifications, notifyMessage, setNotificationsEnabled } from "./notify";
 import { AvatarContext, DEFAULT_AVATAR } from "./avatar";
 import type { ChatMessage, Page, ServerEvent, Status } from "./types";
@@ -30,6 +30,7 @@ export default function App() {
   const [typing, setTyping] = useState(false);
   const [readAt, setReadAt] = useState<number | null>(null);
   const [avatar, setAvatar] = useState(DEFAULT_AVATAR);
+  const [avatarCustom, setAvatarCustom] = useState(false);
   const [connected, setConnected] = useState(false);
   const [toast, setToast] = useState<{ text: string; kind: ToastKind } | null>(null);
   const toastTimer = useRef<number | null>(null);
@@ -68,7 +69,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void api.avatar().then((info) => setAvatar(info.url)).catch(() => undefined);
+    void api
+      .avatar()
+      .then((info) => {
+        setAvatar(assetUrl(info.url));
+        setAvatarCustom(info.custom);
+      })
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -318,7 +325,15 @@ export default function App() {
         ) : page === "growth" ? (
           <GrowthView showToast={showToast} />
         ) : page === "settings" ? (
-          <SettingsView showToast={showToast} avatar={avatar} onAvatarChange={setAvatar} />
+          <SettingsView
+            showToast={showToast}
+            avatar={avatar}
+            avatarCustom={avatarCustom}
+            onAvatarChange={(url, custom) => {
+              setAvatar(url);
+              setAvatarCustom(custom);
+            }}
+          />
         ) : (
           <DebugView showToast={showToast} />
         )}

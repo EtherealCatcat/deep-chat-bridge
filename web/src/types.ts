@@ -171,7 +171,8 @@ export type ServerEvent =
   | { type: "busy"; busy: boolean }
   | { type: "error"; message: string }
   | { type: "done"; turnId: string }
-  | { type: "diary"; day: string };
+  | { type: "diary"; day: string }
+  | { type: "burst_cancel"; from: number };
 
 export interface TimelineEvent {
   ts: number;

@@ -1,6 +1,9 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CONFIG } from "../src/config.js";
-import { quoteLine, toLLMHistory } from "../src/chat.js";
+import { DEFAULT_CONFIG, ensureLayout, paths } from "../src/config.js";
+import { appendChatMessage, quoteLine, readDayMessages, removeUserMessagesSince, toLLMHistory } from "../src/chat.js";
 import type { ChatMessage } from "../src/types.js";
 
 const config = structuredClone(DEFAULT_CONFIG);
@@ -71,5 +74,43 @@ describe("quoted messages", () => {
     const history = toLLMHistory(messages, 10, config);
     expect(history[1].content).toContain("（引用 主人 09:30：今天有点累）");
     expect(history[1].content).toContain("那先歇一会儿。");
+  });
+});
+
+describe("cancelling a burst", () => {
+  const config = structuredClone(DEFAULT_CONFIG);
+
+  it("removes user messages since the burst start and keeps the earlier ones", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "deephome-chat-"));
+    try {
+      const p = paths(root);
+      ensureLayout(p);
+      const start = new Date("2026-11-18T10:00:00+08:00").getTime();
+      appendChatMessage(p, config, { role: "user", kind: "text", text: "开始之前", ts: start - 2_000 });
+      appendChatMessage(p, config, { role: "assistant", kind: "text", text: "嗯。", ts: start - 1_000 });
+      appendChatMessage(p, config, { role: "user", kind: "text", text: "连发一", ts: start + 10 });
+      appendChatMessage(p, config, { role: "user", kind: "text", text: "连发二", ts: start + 20 });
+
+      expect(removeUserMessagesSince(p, config, start)).toBe(2);
+      expect(readDayMessages(p, "2026-11-18").map((message) => message.text)).toEqual(["开始之前", "嗯。"]);
+      expect(removeUserMessagesSince(p, config, start)).toBe(0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("drops the day file when every message was cancelled", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "deephome-chat-"));
+    try {
+      const p = paths(root);
+      ensureLayout(p);
+      const start = new Date("2026-11-18T10:00:00+08:00").getTime();
+      appendChatMessage(p, config, { role: "user", kind: "text", text: "唯一一条", ts: start + 10 });
+
+      expect(removeUserMessagesSince(p, config, start)).toBe(1);
+      expect(readDayMessages(p, "2026-11-18")).toEqual([]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

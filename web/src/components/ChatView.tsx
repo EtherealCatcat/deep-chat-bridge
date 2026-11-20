@@ -296,6 +296,7 @@ export function ChatView({
   onSend,
   onSticker,
   onBurst,
+  onCancelBurst,
   onNavigateSettings,
 }: {
   status: Status | null;
@@ -305,6 +306,7 @@ export function ChatView({
   onSend: (text: string, quote?: ChatMessage, image?: string) => Promise<void>;
   onSticker: (name: string) => Promise<void>;
   onBurst: (active: boolean) => Promise<void>;
+  onCancelBurst: () => Promise<void>;
   onNavigateSettings: () => void;
 }) {
   const [text, setText] = useState("");
@@ -313,6 +315,7 @@ export function ChatView({
   const [preparing, setPreparing] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [cancellingBurst, setCancellingBurst] = useState(false);
   const [stickerOpen, setStickerOpen] = useState(false);
   const [stickers, setStickers] = useState<Sticker[]>([]);
   const [stickerPage, setStickerPage] = useState(0);
@@ -438,6 +441,17 @@ export function ChatView({
     await onBurst(false);
   }
 
+  async function undoBurst() {
+    if (cancellingBurst) return;
+    setCancellingBurst(true);
+    try {
+      await onCancelBurst();
+      setQuote(null);
+    } finally {
+      setCancellingBurst(false);
+    }
+  }
+
   useEffect(() => {
     if (stickerPage >= stickerPageCount) setStickerPage(stickerPageCount - 1);
   }, [stickerPage, stickerPageCount]);
@@ -544,12 +558,23 @@ export function ChatView({
               <ListPlus className="h-3.5 w-3.5 shrink-0 text-sea-deep" />
               <div className="min-w-0 flex-1 text-[10.5px] text-ink-soft">
                 <span className="font-medium text-sea-deep">连发中</span>
-                <span className="text-ink-faint"> · 已经攒了 {burstCount} 条，她还没收到</span>
+                <span className="text-ink-faint">
+                  {" "}
+                  · {burstCount} 条待发送 - 点击「撤销」回退所有消息
+                </span>
               </div>
               <button
                 type="button"
+                onClick={() => void undoBurst()}
+                disabled={cancellingBurst || sending || preparing}
+                className="shrink-0 rounded-full border border-ink/15 px-3 py-1 text-[10.5px] font-medium text-ink-soft transition hover:border-ink/25 hover:bg-white/70 disabled:opacity-50"
+              >
+                撤销
+              </button>
+              <button
+                type="button"
                 onClick={() => void finishBurst()}
-                disabled={sending || preparing}
+                disabled={cancellingBurst || sending || preparing}
                 className="shrink-0 rounded-full bg-sea px-3 py-1 text-[10.5px] font-medium text-white transition hover:bg-sea-deep disabled:opacity-50"
               >
                 发完了

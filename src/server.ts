@@ -18,7 +18,7 @@ import {
   relationshipGrowth,
   updateStreak,
 } from "./relationship.js";
-import { appendChatMessage, recentMessages } from "./chat.js";
+import { appendChatMessage, recentMessages, removeUserMessagesSince } from "./chat.js";
 import { addReminder, cancelReminder, loadReminders, markReminderDone, parseDue } from "./care.js";
 import { listDiaries, readDiary, yesterdayKey } from "./diaryStore.js";
 import { writeDiary, diaryTarget } from "./diary.js";
@@ -307,6 +307,21 @@ app.post("/api/burst", async (request) => {
   const active = Boolean(body.active);
   agent.setHold(active);
   return { ok: true, active, count: agent.pendingCount };
+});
+
+app.post("/api/burst/cancel", async () => {
+  const startedAt = agent.burstStartedAt;
+  agent.cancelHold();
+  if (!startedAt) {
+    return { ok: true, cancelled: 0, active: false, count: agent.pendingCount };
+  }
+  // 连发期间的消息在发送时已经落盘，这里把它们从聊天记录里也拿掉，
+  // 不留给模型，也不留给下次打开时的历史。
+  const cancelled = removeUserMessagesSince(p, config, startedAt);
+  updateStreak(p, config);
+  broadcast({ type: "burst_cancel", from: startedAt });
+  onChange();
+  return { ok: true, cancelled, active: false, count: agent.pendingCount };
 });
 
 app.post("/api/new", async () => {

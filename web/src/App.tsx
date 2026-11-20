@@ -187,6 +187,12 @@ export default function App() {
         case "diary":
           showToast("她写完了今天的日记。");
           break;
+        case "burst_cancel":
+          setMessages((prev) =>
+            prev.filter((message) => !(message.role === "user" && message.ts >= data.from)),
+          );
+          setStatus((prev) => (prev ? { ...prev, burst: false, burstCount: 0 } : prev));
+          break;
         case "mood":
           setStatus((prev) => (prev ? { ...prev, mood: data.mood } : prev));
           break;
@@ -267,6 +273,17 @@ export default function App() {
     }
   }
 
+  async function cancelBurst() {
+    try {
+      const result = await api.cancelBurst();
+      setStatus((prev) => (prev ? { ...prev, burst: result.active, burstCount: result.count } : prev));
+      showToast(result.cancelled > 0 ? `已撤销 ${result.cancelled} 条消息。` : "这次连发没有要撤销的消息。");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "撤销失败。", "error");
+      throw error;
+    }
+  }
+
   function navigate(next: Page) {
     setPage(next);
     if (next === "chat") void markRead();
@@ -287,6 +304,7 @@ export default function App() {
             onSend={send}
             onSticker={sendSticker}
             onBurst={toggleBurst}
+            onCancelBurst={cancelBurst}
             onNavigateSettings={() => navigate("settings")}
           />
         ) : page === "today" ? (

@@ -43,6 +43,8 @@ export class ChatAgent {
   private running = false;
   private ownMode = false;
   private holding = false;
+  /** 本轮连发开始的时刻；撤销时用它划掉这之后的所有用户消息。 */
+  private holdStartedAt = 0;
   private abort: AbortController | null = null;
   private turnSeq = 0;
   private sentInTurn = false;
@@ -67,11 +69,18 @@ export class ChatAgent {
     return this.holding;
   }
 
+  get burstStartedAt(): number {
+    return this.holdStartedAt;
+  }
+
   /**
    * 连发模式：消息只落盘并攒在 pending 里，不唤醒她；关掉时才把整批交给她。
    */
   setHold(active: boolean): boolean {
-    this.holding = Boolean(active);
+    const next = Boolean(active);
+    if (next && !this.holding) this.holdStartedAt = Date.now();
+    if (!next) this.holdStartedAt = 0;
+    this.holding = next;
     if (this.holding) {
       if (this.timer) {
         clearTimeout(this.timer);
@@ -82,6 +91,23 @@ export class ChatAgent {
     }
     this.onChange();
     return this.holding;
+  }
+
+  /**
+   * 放弃这次连发：退出连发、丢掉这之后攒下的消息，不交给她。
+   * 返回被丢掉的 pending 条数；连发期间已经落盘的聊天记录由调用方清理。
+   */
+  cancelHold(): number {
+    const since = this.holdStartedAt;
+    this.holding = false;
+    this.holdStartedAt = 0;
+    const before = this.pending.length;
+    if (since > 0) {
+      this.pending = this.pending.filter((item) => item.ts < since);
+    }
+    if (this.pending.length && !this.running) this.arm(300);
+    this.onChange();
+    return before - this.pending.length;
   }
 
   setContext(ctx: AgentContext): void {
@@ -109,6 +135,7 @@ export class ChatAgent {
 
   newSession(): void {
     this.holding = false;
+    this.holdStartedAt = 0;
     this.pending = [];
     this.historyFrom = Date.now();
     this.emit({ type: "read", at: Date.now() });
@@ -117,6 +144,7 @@ export class ChatAgent {
 
   stop(): void {
     this.holding = false;
+    this.holdStartedAt = 0;
     this.pending = [];
     this.ownMode = false;
     if (this.timer) {

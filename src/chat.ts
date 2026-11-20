@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { AppConfig, ChatMessage, LLMMessage, QuoteRef } from "./types.js";
 import type { Paths } from "./config.js";
-import { appendJsonl, readJsonl, readText, writeJson, exists } from "./store.js";
+import { appendJsonl, atomicWrite, exists, listFiles, readJsonl, readText, removeFile, writeJson } from "./store.js";
 import { addDays, dayKey, dayStartTs, formatClock } from "./time.js";
 
 let counter = 0;
@@ -33,6 +33,31 @@ export function appendChatMessage(
 
 export function readDayMessages(p: Paths, day: string): ChatMessage[] {
   return readJsonl<ChatMessage>(chatFile(p, day));
+}
+
+/**
+ * 撤销连发：删掉某时刻之后落盘的用户消息（助手消息不动）。
+ * 只扫该时刻所在逻辑日及之后的文件；返回删掉的条数。
+ */
+export function removeUserMessagesSince(p: Paths, config: AppConfig, since: number): number {
+  const fromDay = dayKey(since, config.behavior.rotateHour, config.behavior.timezone);
+  let removed = 0;
+  for (const file of listFiles(p.chat, ".jsonl")) {
+    const day = path.basename(file, ".jsonl");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < fromDay) continue;
+    const messages = readJsonl<ChatMessage>(file);
+    const kept = messages.filter(
+      (message) => !(message.role === "user" && typeof message.ts === "number" && message.ts >= since),
+    );
+    if (kept.length === messages.length) continue;
+    removed += messages.length - kept.length;
+    if (kept.length === 0) {
+      removeFile(file);
+    } else {
+      atomicWrite(file, kept.map((message) => JSON.stringify(message)).join("\n") + "\n");
+    }
+  }
+  return removed;
 }
 
 export function recentMessages(p: Paths, config: AppConfig, limit = 40): ChatMessage[] {

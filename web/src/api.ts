@@ -80,6 +80,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ active }),
     }),
+  cancelBurst: () =>
+    request<{ ok: boolean; cancelled: number; active: boolean; count: number }>("/api/burst/cancel", {
+      method: "POST",
+    }),
   newSession: () => request<{ ok: boolean }>("/api/new", { method: "POST" }),
   memory: () => request<MemorySnapshot>("/api/memory"),
   saveMemory: (name: string, content: string) =>

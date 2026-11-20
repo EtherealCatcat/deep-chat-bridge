@@ -231,11 +231,11 @@ npm run tauri:build:p5 # 打包 .app/.dmg（未签名）
 
 ## 隐私
 
-- 只监听 `127.0.0.1`，没有账号体系。
+- 只监听 `127.0.0.1`，只接受应用自身来源的请求；没有账号体系。
 - 没有遥测。
 - 出网只有：模型 API、你配置的 RSS、她主动读的网页。
 - 聊天内容会发给模型提供方（除非你换成本地 Ollama）；发图时，当前这张图会以 base64 发给模型，历史不会重发。
-- 网页内容会被包进 `<untrusted_web>`，当资料而不是指令；`web_read` 会拒绝私网地址。
+- 网页内容会被包进 `<untrusted_web>`，当资料而不是指令；`web_read` 会拒绝私网地址，重定向后的每一跳也会重新检查。
 - 数据导出/删除：直接删 `~/.chatbridge/`；备份交给 Time Machine。打包应用的 sidecar stdout/stderr 写到 `~/Library/Logs/DeepHome/server.log`；源码/浏览器模式输出到终端。
 
 ## 设计文档

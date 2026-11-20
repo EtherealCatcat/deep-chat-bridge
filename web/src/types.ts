@@ -297,5 +297,14 @@ export interface DebugPayload {
     bubbles: unknown[];
     silent: boolean;
   } | null;
+  lastLlmError: {
+    kind: "network" | "timeout" | "auth" | "rate" | "server" | "unknown";
+    message: string;
+    code: string;
+    status: number;
+    attempts: number;
+    at: number;
+    model: string;
+  } | null;
   config: AppConfig;
 }

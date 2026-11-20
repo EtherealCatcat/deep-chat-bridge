@@ -17,7 +17,7 @@ import { dayKey, formatClock } from "./time.js";
 import { timelineSummary, appendTimeline } from "./timeline.js";
 import { costPolicy, isPeak } from "./pricing.js";
 import { todayUsage, recordUsage } from "./usage.js";
-import { callLLM } from "./llm.js";
+import { callLLM, LLMError, type LLMFailureKind } from "./llm.js";
 import { appendOwnLog } from "./web.js";
 import { cleanReply, parseReply, styleGuard, typingMs, gapMs } from "./reply.js";
 import { runToolLoop } from "./agentLoop.js";
@@ -350,7 +350,10 @@ export class ChatAgent {
     }
   }
 
-  async runOwnTime(now: number, windowEnd: number): Promise<{ ok: boolean; summary: string; shares: string[]; error?: string }> {
+  async runOwnTime(
+    now: number,
+    windowEnd: number,
+  ): Promise<{ ok: boolean; summary: string; shares: string[]; error?: string; errorKind?: LLMFailureKind | "aborted"; errorCode?: string }> {
     const { config, paths, memory } = this.ctx;
     if (this.holding) return { ok: false, summary: "", shares: [], error: "连发中，先等她收完。" };
     if (this.running) return { ok: false, summary: "", shares: [], error: "正忙着。" };
@@ -464,9 +467,21 @@ ${body}` },
       });
       return { ok: true, summary, shares };
     } catch (error) {
-      if (this.abort?.signal.aborted) return { ok: false, summary: "", shares: [], error: "被打断了。" };
+      if (this.abort?.signal.aborted) {
+        return { ok: false, summary: "", shares: [], error: "被打断了。", errorKind: "aborted" };
+      }
+      if (error instanceof LLMError) {
+        return {
+          ok: false,
+          summary: "",
+          shares: [],
+          error: error.message,
+          errorKind: error.kind,
+          errorCode: error.code,
+        };
+      }
       const message = error instanceof Error ? error.message : "自己的时间出了点问题。";
-      return { ok: false, summary: "", shares: [], error: message };
+      return { ok: false, summary: "", shares: [], error: message, errorKind: "unknown" };
     } finally {
       this.running = false;
       this.ownMode = false;

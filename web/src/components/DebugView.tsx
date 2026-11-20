@@ -40,6 +40,7 @@ export function DebugView({ showToast }: { showToast: (text: string, kind?: "inf
   const [tab, setTab] = useState<DebugTab>("system");
   const [refreshing, setRefreshing] = useState(false);
   const [consolidating, setConsolidating] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
 
   async function load(show = false) {
     setRefreshing(true);
@@ -56,6 +57,20 @@ export function DebugView({ showToast }: { showToast: (text: string, kind?: "inf
   useEffect(() => {
     void load();
   }, []);
+
+  async function backfill() {
+    if (backfilling) return;
+    setBackfilling(true);
+    try {
+      const result = await api.backfillMilestones();
+      showToast(result.added > 0 ? `补录完成，新增 ${result.added} 条记号。` : "没有需要补录的记号。");
+      await load();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "补录失败。", "error");
+    } finally {
+      setBackfilling(false);
+    }
+  }
 
   async function consolidate() {
     if (consolidating) return;
@@ -107,6 +122,10 @@ export function DebugView({ showToast }: { showToast: (text: string, kind?: "inf
             <button type="button" onClick={() => void load(true)} className="btn-ghost">
               {refreshing ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               刷新
+            </button>
+            <button type="button" onClick={() => void backfill()} disabled={backfilling} className="btn-ghost">
+              {backfilling ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Clock className="h-3.5 w-3.5" />}
+              补录记号
             </button>
             <button type="button" onClick={() => void consolidate()} disabled={consolidating} className="btn-primary">
               {consolidating ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
@@ -229,6 +248,30 @@ export function DebugView({ showToast }: { showToast: (text: string, kind?: "inf
         </Card>
 
         <div className="space-y-4">
+          <Card className="p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-[10px] uppercase tracking-[0.16em] text-ink-faint">最近一次模型失败</div>
+              {data.lastLlmError ? (
+                <span className="rounded-full bg-coral/10 px-1.5 py-0.5 font-mono text-[9px] text-coral">
+                  {data.lastLlmError.kind}
+                </span>
+              ) : null}
+            </div>
+            {data.lastLlmError ? (
+              <>
+                <div className="text-[11.5px] leading-5 text-ink">{data.lastLlmError.message}</div>
+                <div className="mt-1.5 font-mono text-[9.5px] text-ink-faint">
+                  {new Date(data.lastLlmError.at).toLocaleString("zh-CN")} · 第 {data.lastLlmError.attempts} 次尝试
+                </div>
+                <div className="mt-0.5 font-mono text-[9.5px] text-ink-faint">
+                  {data.lastLlmError.code || "no-code"} · HTTP {data.lastLlmError.status || "-"}
+                </div>
+                <div className="mt-0.5 truncate font-mono text-[9.5px] text-ink-faint">{data.lastLlmError.model}</div>
+              </>
+            ) : (
+              <p className="text-[10px] text-ink-faint">最近没有失败记录。</p>
+            )}
+          </Card>
           <Card className="p-4">
             <div className="mb-2 text-[10px] uppercase tracking-[0.16em] text-ink-faint">life.json</div>
             <Pre text={JSON.stringify(data.life, null, 2)} />

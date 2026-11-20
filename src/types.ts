@@ -154,6 +154,8 @@ export interface OwnTimeState {
   shareDay: string;
   shareCount: number;
   pendingShares: string[];
+  /** 当天失败后用掉的那次补跑（避免一整天反复重试烧额度）。 */
+  retryDay?: string;
   updatedAt: number;
 }
 

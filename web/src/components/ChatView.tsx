@@ -65,18 +65,24 @@ function MessageRow({
     const file = String(message.meta?.file ?? "");
     return (
       <div id={`msg-${message.id}`} className="fade-up group flex justify-end">
-        <div className="min-w-0 max-w-[62%]">
+        <div className="flex min-w-0 max-w-[62%] flex-col items-end">
           {message.quote ? <QuoteBlock quote={message.quote} /> : null}
           {file ? (
             <StickerImage
               src={`${API_BASE}/stickers/${encodeURIComponent(file.replace(/^\/+/, ""))}`}
               alt={message.text}
-              className="ml-auto max-h-40 max-w-[170px]"
+              className="max-h-40 max-w-[170px]"
             />
           ) : (
             <div className="bubble-me">{message.text}</div>
           )}
           <div className="mt-1 flex items-center justify-end gap-1.5 pr-1 text-[10px] text-ink-faint">
+            {showRead && readAt && readAt >= message.ts ? (
+              <span className="inline-flex items-center gap-0.5 text-sea/80">
+                <CheckCheck className="h-3 w-3" />
+                已读
+              </span>
+            ) : null}
             <button
               type="button"
               onClick={() => onQuote(message)}
@@ -86,12 +92,6 @@ function MessageRow({
               引用
             </button>
             <span>{formatTime(message.ts)}</span>
-            {showRead && readAt && readAt >= message.ts ? (
-              <span className="inline-flex items-center gap-0.5 text-sea/80">
-                <CheckCheck className="h-3 w-3" />
-                已读
-              </span>
-            ) : null}
           </div>
         </div>
       </div>
@@ -102,17 +102,23 @@ function MessageRow({
     const file = String(message.meta?.file ?? "");
     return (
       <div id={`msg-${message.id}`} className="fade-up group flex justify-end">
-        <div className="min-w-0 max-w-[82%]">
+        <div className="flex min-w-0 max-w-[82%] flex-col items-end">
           {message.quote ? <QuoteBlock quote={message.quote} /> : null}
           <img
             src={`${API_BASE}/media/${file.replace(/^\/+/, "")}`}
             alt="你发来的图片"
-            className="ml-auto max-h-72 max-w-full rounded-2xl border border-line/60 object-cover shadow-sm"
+            className="max-h-72 max-w-full rounded-2xl border border-line/60 object-cover shadow-sm"
           />
           {message.text && message.text !== "（发来一张图片）" ? (
             <div className="bubble-me mt-1.5">{message.text}</div>
           ) : null}
           <div className="mt-1 flex items-center justify-end gap-1.5 pr-1 text-[10px] text-ink-faint">
+            {showRead && readAt && readAt >= message.ts ? (
+              <span className="inline-flex items-center gap-0.5 text-sea/80">
+                <CheckCheck className="h-3 w-3" />
+                已读
+              </span>
+            ) : null}
             <button
               type="button"
               onClick={() => onQuote(message)}
@@ -122,12 +128,6 @@ function MessageRow({
               引用
             </button>
             <span>{formatTime(message.ts)}</span>
-            {showRead && readAt && readAt >= message.ts ? (
-              <span className="inline-flex items-center gap-0.5 text-sea/80">
-                <CheckCheck className="h-3 w-3" />
-                已读
-              </span>
-            ) : null}
           </div>
         </div>
       </div>
@@ -137,10 +137,16 @@ function MessageRow({
   if (message.role === "user") {
     return (
       <div id={`msg-${message.id}`} className="fade-up group flex justify-end">
-        <div className="min-w-0 max-w-[82%]">
+        <div className="flex min-w-0 max-w-[82%] flex-col items-end">
           {message.quote ? <QuoteBlock quote={message.quote} /> : null}
           <div className="bubble-me">{message.text}</div>
           <div className="mt-1 flex items-center justify-end gap-1.5 pr-1 text-[10px] text-ink-faint">
+            {showRead && readAt && readAt >= message.ts ? (
+              <span className="inline-flex items-center gap-0.5 text-sea/80">
+                <CheckCheck className="h-3 w-3" />
+                已读
+              </span>
+            ) : null}
             <button
               type="button"
               onClick={() => onQuote(message)}
@@ -150,12 +156,6 @@ function MessageRow({
               引用
             </button>
             <span>{formatTime(message.ts)}</span>
-            {showRead && readAt && readAt >= message.ts ? (
-              <span className="inline-flex items-center gap-0.5 text-sea/80">
-                <CheckCheck className="h-3 w-3" />
-                已读
-              </span>
-            ) : null}
           </div>
         </div>
       </div>

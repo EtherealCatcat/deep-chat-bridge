@@ -37,6 +37,7 @@ export function defaultOwnTimeState(): OwnTimeState {
     shareDay: "",
     shareCount: 0,
     pendingShares: [],
+    retryDay: "",
     updatedAt: 0,
   };
 }
@@ -169,6 +170,22 @@ export function markOwnEnd(state: OwnTimeState, now: number, result: string): vo
   state.windowEnd = 0;
   state.windowKey = "";
   state.updatedAt = now;
+}
+
+/**
+ * 网络之类的基础设施故障不该算她今天已经出过门：退回这次配额，10 分钟后再试一次。
+ * 每天只补一次，避免一整天反复重试烧额度。返回是否安排了补跑。
+ */
+export function scheduleOwnRetry(state: OwnTimeState, config: AppConfig, now: number): boolean {
+  const today = dayKey(now, config.behavior.rotateHour, config.behavior.timezone);
+  if (state.retryDay === today) return false;
+  state.retryDay = today;
+  state.runsToday = Math.max(0, state.runsToday - 1);
+  state.nextAt = now + 10 * 60_000;
+  state.windowEnd = state.nextAt + 30 * 60_000;
+  state.windowKey = "retry";
+  state.updatedAt = now;
+  return true;
 }
 
 export function ownLabel(state: OwnTimeState, now: number, timezone: string): string {

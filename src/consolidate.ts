@@ -107,6 +107,7 @@ export async function consolidateMemory(day: string, ctx: ConsolidateContext): P
       bumpRelationship(paths, config, {
         trust: clamp(trust, -2, 2),
         intimacy: clamp(intimacy, -2, 2),
+        milestone: "第一次整理记忆",
         reason: parsed.relationship?.note,
       });
     }

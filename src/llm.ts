@@ -1,13 +1,31 @@
 import type { AppConfig, LLMMessage, LLMResult, LLMUsage, ToolCall } from "./types.js";
 
+export type LLMFailureKind = "network" | "timeout" | "auth" | "rate" | "server" | "unknown";
+
+export interface LLMErrorOptions {
+  status?: number;
+  body?: string;
+  code?: string;
+  kind?: LLMFailureKind;
+  attempts?: number;
+  cause?: unknown;
+}
+
 export class LLMError extends Error {
-  constructor(
-    message: string,
-    readonly status = 0,
-    readonly body = "",
-  ) {
-    super(message);
+  readonly status: number;
+  readonly body: string;
+  code: string;
+  kind: LLMFailureKind;
+  attempts: number;
+
+  constructor(message: string, options: LLMErrorOptions = {}) {
+    super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.name = "LLMError";
+    this.status = options.status ?? 0;
+    this.body = options.body ?? "";
+    this.code = options.code ?? "";
+    this.kind = options.kind ?? "unknown";
+    this.attempts = options.attempts ?? 1;
   }
 }
 
@@ -20,6 +38,23 @@ export interface LLMOptions {
   json?: boolean;
   timeoutMs?: number;
   signal?: AbortSignal;
+}
+
+/** 最近一次失败的模型请求，调试页用它显示原因、时间和重试次数。 */
+export interface LLMFailureRecord {
+  kind: LLMFailureKind;
+  message: string;
+  code: string;
+  status: number;
+  attempts: number;
+  at: number;
+  model: string;
+}
+
+let lastFailure: LLMFailureRecord | null = null;
+
+export function getLastLLMFailure(): LLMFailureRecord | null {
+  return lastFailure;
 }
 
 function endpoint(baseUrl: string): string {
@@ -42,9 +77,105 @@ function friendlyError(status: number, body: string): string {
   return body.slice(0, 300) || `请求失败（HTTP ${status}）`;
 }
 
-export async function callLLM(config: AppConfig, messages: LLMMessage[], options: LLMOptions = {}): Promise<LLMResult> {
+function kindForStatus(status: number): LLMFailureKind {
+  if (status === 401 || status === 403 || status === 402) return "auth";
+  if (status === 429) return "rate";
+  if (status >= 500) return "server";
+  return "unknown";
+}
+
+function isRetryable(error: LLMError): boolean {
+  return error.kind === "network" || error.kind === "rate" || error.kind === "server";
+}
+
+const NETWORK_DETAIL: Record<string, string> = {
+  ENOTFOUND: "域名解析失败",
+  EAI_AGAIN: "域名解析暂时失败",
+  ECONNREFUSED: "连接被拒绝",
+  ECONNRESET: "连接被重置",
+  ETIMEDOUT: "连接超时",
+  EHOSTUNREACH: "网络不可达",
+  ENETUNREACH: "网络不可达",
+  ENETDOWN: "网络断开",
+  EPIPE: "连接中断",
+  UND_ERR_CONNECT_TIMEOUT: "连接超时",
+  UND_ERR_SOCKET: "连接被断开",
+  UND_ERR_CLOSED: "连接被关闭",
+  CERT_HAS_EXPIRED: "HTTPS 证书过期",
+  DEPTH_ZERO_SELF_SIGNED_CERT: "HTTPS 证书不受信任",
+  SELF_SIGNED_CERT_IN_CHAIN: "HTTPS 证书不受信任",
+  UNABLE_TO_VERIFY_LEAF_SIGNATURE: "HTTPS 证书无法验证",
+  ERR_TLS_CERT_ALTNAME_INVALID: "HTTPS 证书和域名不匹配",
+};
+
+/** fetch 的真实原因藏在 error.cause（常常还套着 AggregateError）里，逐层挖出来。 */
+function collectCodes(value: unknown, depth = 0): string[] {
+  if (!value || typeof value !== "object" || depth > 5) return [];
+  const node = value as { code?: unknown; cause?: unknown; errors?: unknown };
+  const codes: string[] = [];
+  if (typeof node.code === "string") codes.push(node.code);
+  if (Array.isArray(node.errors)) {
+    for (const inner of node.errors) codes.push(...collectCodes(inner, depth + 1));
+  }
+  if (node.cause) codes.push(...collectCodes(node.cause, depth + 1));
+  return codes;
+}
+
+function networkFailure(error: unknown): LLMError {
+  const codes = collectCodes(error);
+  const code = codes.find((item) => item in NETWORK_DETAIL) ?? codes[0] ?? "";
+  const detail = code ? NETWORK_DETAIL[code] : "";
+  return new LLMError(detail ? `网络没连上（${detail}）` : "网络没连上", {
+    kind: "network",
+    code,
+    cause: error,
+  });
+}
+
+const MAX_ATTEMPTS = 5;
+
+/** 1s / 2s / 4s / 8s，带 ±20% jitter，总计约 15 秒。 */
+function retryDelay(attempt: number): number {
+  const base = [1000, 2000, 4000, 8000][Math.min(attempt - 1, 3)] ?? 8000;
+  return Math.round(base * (0.8 + Math.random() * 0.4));
+}
+
+export async function callLLM(
+  config: AppConfig,
+  messages: LLMMessage[],
+  options: LLMOptions = {},
+): Promise<LLMResult> {
+  try {
+    return await requestLLM(config, messages, options);
+  } catch (error) {
+    const failure = error instanceof LLMError ? error : new LLMError("模型请求失败。", { cause: error });
+    lastFailure = {
+      kind: failure.kind,
+      message: failure.message,
+      code: failure.code,
+      status: failure.status,
+      attempts: failure.attempts,
+      at: Date.now(),
+      model: options.model ?? config.model.model,
+    };
+    console.warn(
+      `[llm] ${failure.kind} ${failure.code || "-"} ${failure.message}（第 ${failure.attempts} 次尝试）`,
+    );
+    throw failure;
+  }
+}
+
+async function requestLLM(
+  config: AppConfig,
+  messages: LLMMessage[],
+  options: LLMOptions,
+): Promise<LLMResult> {
   if (!config.model.apiKey.trim()) {
-    throw new LLMError("还没有配置 DeepSeek API Key。打开设置，把 key 填进去。", 401);
+    throw new LLMError("还没有配置 DeepSeek API Key。打开设置，把 key 填进去。", {
+      status: 401,
+      kind: "auth",
+      code: "NO_API_KEY",
+    });
   }
   const model = options.model ?? config.model.model;
   const body: Record<string, unknown> = {
@@ -72,9 +203,8 @@ export async function callLLM(config: AppConfig, messages: LLMMessage[], options
     body.response_format = { type: "json_object" };
   }
 
-  const maxAttempts = 3;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  let lastError: LLMError | null = null;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const timeout = AbortSignal.timeout(options.timeoutMs ?? 120_000);
     const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
     try {
@@ -89,25 +219,31 @@ export async function callLLM(config: AppConfig, messages: LLMMessage[], options
       });
       const text = await response.text();
       if (!response.ok) {
-        const retryable = response.status === 429 || response.status >= 500;
-        if (retryable && attempt < maxAttempts) {
-          await sleep(600 * attempt * attempt);
-          continue;
-        }
-        throw new LLMError(friendlyError(response.status, text), response.status, text);
+        throw new LLMError(friendlyError(response.status, text), {
+          status: response.status,
+          body: text,
+          kind: kindForStatus(response.status),
+          code: `HTTP_${response.status}`,
+        });
       }
       let parsed: unknown;
       try {
         parsed = JSON.parse(text);
       } catch {
-        throw new LLMError("模型返回的不是合法 JSON。", response.status, text);
+        throw new LLMError("模型返回的不是合法 JSON。", {
+          status: response.status,
+          body: text,
+          code: "BAD_JSON",
+        });
       }
       const root = parsed as {
         choices?: { message?: { content?: string | null; tool_calls?: ToolCall[] }; finish_reason?: string }[];
         usage?: LLMUsage;
         error?: { message?: string };
       };
-      if (root.error?.message) throw new LLMError(root.error.message, response.status, text);
+      if (root.error?.message) {
+        throw new LLMError(root.error.message, { status: response.status, body: text, code: "API_ERROR" });
+      }
       const choice = root.choices?.[0];
       const content = choice?.message?.content ?? "";
       const toolCalls = choice?.message?.tool_calls ?? [];
@@ -119,22 +255,39 @@ export async function callLLM(config: AppConfig, messages: LLMMessage[], options
         finishReason: choice?.finish_reason ?? "stop",
       };
     } catch (error) {
-      lastError = error;
-      if (error instanceof LLMError) throw error;
-      if (error instanceof DOMException && error.name === "TimeoutError") {
-        if (attempt < maxAttempts) {
-          await sleep(800 * attempt);
+      if (error instanceof LLMError) {
+        if (isRetryable(error) && attempt < MAX_ATTEMPTS) {
+          lastError = error;
+          console.warn(`[llm] ${error.kind} ${error.code}，${retryDelay(attempt)}ms 后重试（${attempt}/${MAX_ATTEMPTS - 1}）`);
+          await sleep(retryDelay(attempt));
           continue;
         }
-        throw new LLMError("模型响应超时。", 0);
+        error.attempts = attempt;
+        throw error;
       }
-      if (attempt < maxAttempts) {
-        await sleep(800 * attempt);
+      if (error instanceof DOMException && error.name === "TimeoutError") {
+        // 超时不重试：一次请求已经等满了 timeoutMs，重试只会让用户等更久。
+        throw new LLMError("模型响应超时。", {
+          kind: "timeout",
+          code: "TIMEOUT",
+          attempts: attempt,
+          cause: error,
+        });
+      }
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw new LLMError("请求被取消了。", { code: "ABORT_ERR", attempts: attempt, cause: error });
+      }
+      const failure = networkFailure(error);
+      failure.attempts = attempt;
+      lastError = failure;
+      if (attempt < MAX_ATTEMPTS) {
+        console.warn(`[llm] ${failure.code || "network"}，${retryDelay(attempt)}ms 后重试（${attempt}/${MAX_ATTEMPTS - 1}）`);
+        await sleep(retryDelay(attempt));
         continue;
       }
     }
   }
-  throw new LLMError(lastError instanceof Error ? lastError.message : "模型请求失败。");
+  throw lastError ?? new LLMError("模型请求失败。");
 }
 
 export async function callJSON<T>(

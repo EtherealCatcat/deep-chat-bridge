@@ -11,7 +11,13 @@ import { ChatAgent } from "./agent.js";
 import { Scheduler } from "./scheduler.js";
 import { buildStatus } from "./status.js";
 import { DEFAULT_PERSONA } from "./persona.js";
-import { relationshipDescription, relationshipGrowth, updateStreak } from "./relationship.js";
+import {
+  backfillMilestones,
+  recordFirstChat,
+  relationshipDescription,
+  relationshipGrowth,
+  updateStreak,
+} from "./relationship.js";
 import { appendChatMessage, recentMessages } from "./chat.js";
 import { addReminder, cancelReminder, loadReminders, markReminderDone, parseDue } from "./care.js";
 import { listDiaries, readDiary, yesterdayKey } from "./diaryStore.js";
@@ -21,7 +27,7 @@ import { appendTimeline, readTimeline, readTimelineForDisplay } from "./timeline
 import { loadDeferred, loadLife } from "./life.js";
 import { todayUsage } from "./usage.js";
 import { MODEL_PRICES, costPolicy, normalizePeakWindows, peakInfo } from "./pricing.js";
-import { callLLM } from "./llm.js";
+import { callLLM, getLastLLMFailure } from "./llm.js";
 import { findSticker, listStickers } from "./stickers.js";
 import { avatarFile, avatarInfo, clearAvatar, saveAvatar } from "./avatar.js";
 import { loadOwn, markOwnSeen, ownStateSnapshot, saveOwn } from "./own.js";
@@ -53,6 +59,7 @@ let persona = readText(p.persona, DEFAULT_PERSONA).trim() || DEFAULT_PERSONA;
 const memory = new MemoryStore(p, config);
 memory.ensure();
 updateStreak(p, config);
+backfillMilestones(p, config);
 
 const app = Fastify({ logger: { level: "warn" }, bodyLimit: 20 * 1024 * 1024 });
 await app.register(cors, {
@@ -240,6 +247,7 @@ app.post("/api/messages", async (request, reply) => {
       quote,
     });
     updateStreak(p, config);
+    recordFirstChat(p, config);
     emit({ type: "message", message });
     const detail = sticker.desc ?? sticker.scene ?? "一张表情";
     agent.enqueue(`（${config.ownerTitle}发来一个表情：${sticker.name}，${detail}）`, undefined, quote);
@@ -256,6 +264,7 @@ app.post("/api/messages", async (request, reply) => {
     ...(imageInfo ? { meta: imageInfo } : {}),
   });
   updateStreak(p, config);
+  recordFirstChat(p, config);
   emit({ type: "message", message });
   agent.enqueue(text || "（发来一张图片，看看是什么。）", undefined, quote, imageInfo);
   onChange();
@@ -468,6 +477,13 @@ app.get("/api/relationship", async () => {
   };
 });
 
+// 老数据补录成长记号；按文案去重，重复调用不会长出新条目。
+app.post("/api/relationship/backfill", async () => {
+  const result = backfillMilestones(p, config);
+  onChange();
+  return { ok: true, added: result.added, relationship: result.relationship };
+});
+
 app.get("/api/usage", async () => ({
   today: todayUsage(p, config),
   policy: costPolicy(config, todayUsage(p, config)),
@@ -513,6 +529,7 @@ app.get("/api/debug", async () => ({
   usage: todayUsage(p, config),
   timeline: readTimeline(p, dayKey(Date.now(), config.behavior.rotateHour, config.behavior.timezone)).slice(-20),
   lastTurn: agent.getDebug(),
+  lastLlmError: getLastLLMFailure(),
   config: maskConfig(config),
 }));
 

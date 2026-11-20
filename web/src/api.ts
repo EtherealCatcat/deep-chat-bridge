@@ -130,6 +130,8 @@ export const api = {
     }),
   debug: () => request<DebugPayload>("/api/debug"),
   consolidate: () => request<{ ok: boolean; error?: string }>("/api/debug/consolidate", { method: "POST" }),
+  backfillMilestones: () =>
+    request<{ ok: boolean; added: number }>("/api/relationship/backfill", { method: "POST" }),
   reaction: (text: string) =>
     request<{ ok: boolean }>("/api/reaction", { method: "POST", body: JSON.stringify({ text }) }),
 };

@@ -41,6 +41,30 @@ function isPrivateIp(ip: string): boolean {
   return false;
 }
 
+const PRIVATE_MESSAGE = "这个地址是本机/内网地址，不让看。";
+
+/**
+ * 代理软件（Clash / Mihomo 等）的 fake-ip 段：域名解析到这里说明流量会被
+ * 本机代理接管，属于正常上网路径，按公网处理。
+ */
+function isProxyFakeIp(ip: string): boolean {
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split(".").map(Number);
+    return a === 198 && (b === 18 || b === 19);
+  }
+  if (net.isIPv6(ip)) {
+    const low = ip.toLowerCase();
+    if (low.startsWith("::ffff:")) return isProxyFakeIp(low.slice(7));
+    return low === "fdfe:dcba:9876::" || low.startsWith("fdfe:dcba:9876:");
+  }
+  return false;
+}
+
+/** 真正指向本机/内网的地址；代理 fake-ip 不算。 */
+function isBlockedAddress(ip: string): boolean {
+  return !isProxyFakeIp(ip) && isPrivateIp(ip);
+}
+
 export async function assertSafeUrl(raw: string): Promise<URL> {
   let url: URL;
   try {
@@ -51,20 +75,23 @@ export async function assertSafeUrl(raw: string): Promise<URL> {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new WebError("只能看 http / https 的网页。");
   }
-  if (!url.hostname || url.hostname === "localhost" || url.hostname.endsWith(".local")) {
-    throw new WebError("这个地址不让看。");
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  if (!host || host === "localhost" || host.endsWith(".local")) {
+    throw new WebError(PRIVATE_MESSAGE);
   }
-  if (net.isIP(url.hostname) && isPrivateIp(url.hostname)) {
-    throw new WebError("这个地址不让看。");
+  if (net.isIP(host) && isBlockedAddress(host)) {
+    throw new WebError(PRIVATE_MESSAGE);
   }
+  let addresses: { address: string; family: number }[];
   try {
-    const list = await dns.lookup(url.hostname, { all: true });
-    if (list.some((item) => isPrivateIp(item.address))) {
-      throw new WebError("这个地址不让看。");
-    }
-  } catch (error) {
-    if (error instanceof WebError) throw error;
-    throw new WebError("这个网址连不上。");
+    addresses = await dns.lookup(host, { all: true });
+  } catch {
+    throw new WebError("这个网址没解析出来，可能是网络或代理的问题。");
+  }
+  // 有可用解析结果就放行：代理的 fake-ip 也算正常路径。全部是真实内网地址
+  // 时才拒绝，避免公网域名把请求带到本机或局域网服务上。
+  if (!addresses.length || addresses.every((item) => isBlockedAddress(item.address))) {
+    throw new WebError(PRIVATE_MESSAGE);
   }
   return url;
 }

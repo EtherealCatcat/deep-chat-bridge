@@ -3,6 +3,7 @@ import type { Paths } from "./config.js";
 import type { Rhythm } from "./rhythm.js";
 import { readJson, writeJson } from "./store.js";
 import { formatDateTime, zonedParts, zonedTimeToTs, addDays } from "./time.js";
+import { addMilestone } from "./relationship.js";
 
 function file(p: Paths): string {
   return p.state + "/reminders.json";
@@ -33,6 +34,7 @@ export function addReminder(
   };
   list.push(reminder);
   saveReminders(p, list);
+  addMilestone(p, config, "第一次让我记着事");
   return reminder;
 }
 

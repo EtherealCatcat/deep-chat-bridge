@@ -8,6 +8,7 @@ import {
   markOwnStart,
   planOwnWindow,
   queueShare,
+  scheduleOwnRetry,
   takeShares,
 } from "../src/own.js";
 
@@ -50,5 +51,19 @@ describe("own time windows", () => {
     queueShare(state, "看到一只猫");
     expect(takeShares(state)).toEqual(["看到一只猫"]);
     expect(state.pendingShares).toHaveLength(0);
+  });
+
+  it("gives back the quota on an infrastructure failure, once a day", () => {
+    const state = defaultOwnTimeState();
+    state.runsToday = 1;
+    expect(scheduleOwnRetry(state, config, now)).toBe(true);
+    expect(state.runsToday).toBe(0);
+    expect(state.nextAt).toBe(now + 10 * 60_000);
+    expect(state.windowEnd).toBeGreaterThan(state.nextAt);
+    expect(state.retryDay).toBe("2026-11-18");
+
+    state.runsToday = 1;
+    expect(scheduleOwnRetry(state, config, now + 30 * 60_000)).toBe(false);
+    expect(state.runsToday).toBe(1);
   });
 });

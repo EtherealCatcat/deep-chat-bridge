@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const lookup = vi.hoisted(() => vi.fn());
+vi.mock("node:dns/promises", () => ({ default: { lookup } }));
+
 import {
   isAllowedOrigin,
   isLoopbackHostname,
@@ -6,6 +10,17 @@ import {
   isRequestOriginAllowed,
   isSameLocalService,
 } from "../src/security.js";
+import { WebError, assertSafeUrl } from "../src/web.js";
+
+const answer = (address: string, family: number) => ({ address, family });
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+beforeEach(() => {
+  lookup.mockReset();
+});
 
 describe("local API origin policy", () => {
   it("allows only the dev server and Tauri webview origins", () => {
@@ -65,5 +80,47 @@ describe("local API origin policy", () => {
     expect(isLoopbackOrigin("http://127.0.0.1.evil.example")).toBe(false);
     expect(isLoopbackOrigin("tauri://localhost")).toBe(false);
     expect(isLoopbackOrigin("null")).toBe(false);
+  });
+});
+
+describe("web DNS safety with a local proxy", () => {
+  it("allows Clash fake-ip answers (IPv4 + IPv6 at once)", async () => {
+    lookup.mockResolvedValue([answer("198.18.0.42", 4), answer("fdfe:dcba:9876::1b3", 6)]);
+    await expect(assertSafeUrl("https://example.com/article")).resolves.toBeInstanceOf(URL);
+  });
+
+  it("keeps the public path when a private answer is mixed in", async () => {
+    lookup.mockResolvedValue([answer("203.0.113.9", 4), answer("127.0.0.1", 4)]);
+    await expect(assertSafeUrl("https://example.com")).resolves.toBeInstanceOf(URL);
+  });
+
+  it("still rejects a host that only resolves to internal addresses", async () => {
+    lookup.mockResolvedValue([answer("10.0.0.5", 4)]);
+    const error = await assertSafeUrl("https://intranet.example").catch((e) => e);
+    expect(error).toBeInstanceOf(WebError);
+    expect(messageOf(error)).toContain("本机/内网");
+  });
+
+  it("rejects internal literals and .local without touching DNS", async () => {
+    for (const url of [
+      "http://[fd00::1]/",
+      "http://127.0.0.1:7788/",
+      "http://10.0.0.5/",
+      "http://[::1]/",
+      "http://localhost/",
+      "http://printer.local/",
+    ]) {
+      const error = await assertSafeUrl(url).catch((e) => e);
+      expect(messageOf(error)).toContain("本机/内网");
+    }
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it("tells DNS failures apart from private addresses", async () => {
+    lookup.mockRejectedValue(Object.assign(new Error("queryA ENOTFOUND"), { code: "ENOTFOUND" }));
+    const error = await assertSafeUrl("https://nope.example").catch((e) => e);
+    expect(error).toBeInstanceOf(WebError);
+    expect(messageOf(error)).toContain("没解析出来");
+    expect(messageOf(error)).not.toContain("本机/内网");
   });
 });

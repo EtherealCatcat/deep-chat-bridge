@@ -137,7 +137,12 @@ export async function writeDiary(day: string, ctx: DiaryContext): Promise<boolea
     const life = loadLife(paths);
     life.lastDiary = day;
     saveLife(paths, life);
-    bumpRelationship(paths, config, { intimacy: 0.8, trust: 0.3, reason: "写了一篇日记" });
+    bumpRelationship(paths, config, {
+      intimacy: 0.8,
+      trust: 0.3,
+      milestone: "第一次写日记",
+      reason: "写了一篇日记",
+    });
     appendTimeline(paths, config, { kind: "diary", text: `写了 ${day} 的日记`, meta: { day } });
     emit({ type: "diary", day });
     emit({ type: "timeline", event: { ts: Date.now(), kind: "diary", text: `写了 ${day} 的日记` } });

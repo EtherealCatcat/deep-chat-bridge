@@ -15,6 +15,7 @@ import { consolidateMemory, hasInbox } from "./consolidate.js";
 import { lastAssistantMessageAt, lastOwnerMessageAt, todayProactiveCount } from "./chat.js";
 import { dayKey, formatClock, humanGap, zonedParts } from "./time.js";
 import { appendTimeline } from "./timeline.js";
+import { addMilestone } from "./relationship.js";
 import {
   canShareNow,
   ensureOwnSchedule,
@@ -22,6 +23,7 @@ import {
   markOwnEnd,
   markOwnStart,
   saveOwn,
+  scheduleOwnRetry,
 } from "./own.js";
 
 export interface SchedulerContext {
@@ -231,7 +233,18 @@ export class Scheduler {
     markOwnEnd(own, Date.now(), result.ok ? result.summary : result.error || "在房间里坐了一会儿。");
     own = ensureOwnSchedule(config, Date.now(), own);
 
+    // 网络/服务端的临时故障不该算作她今天已经出过门：退回这次配额，10 分钟后再试一次。
+    const infraFailure =
+      result.errorKind === "network" ||
+      result.errorKind === "timeout" ||
+      result.errorKind === "rate" ||
+      result.errorKind === "server";
+    if (!result.ok && infraFailure) {
+      scheduleOwnRetry(own, config, Date.now());
+    }
+
     if (result.ok) {
+      addMilestone(paths, config, "第一次自己出门");
       const remainingShares = Math.max(0, config.speak.tellOwnerMaxPerDay - own.shareCount);
       for (const share of result.shares.slice(0, remainingShares)) {
         if (canShareNow(own, config, Date.now())) {
@@ -245,7 +258,11 @@ export class Scheduler {
         }
       }
     } else if (result.error && result.error !== "被打断了。") {
-      appendTimeline(paths, config, { kind: "own", text: `自己的时间没去成：${result.error}` });
+      appendTimeline(paths, config, {
+        kind: "own",
+        text: `自己的时间没去成：${result.error}`,
+        meta: { errorKind: result.errorKind, errorCode: result.errorCode },
+      });
     }
     saveOwn(paths, own);
     this.ctx.onChange();
@@ -320,10 +337,12 @@ export class Scheduler {
       "如果不想说，写（不回）。",
     ].join("\n");
 
+    const firstSpeak = life.speakCount === 0;
     const sent = await agent.proactive(nudge);
     life.lastSpeakAt = now;
     life.speakCountDay = today;
     if (sent) life.speakCount += 1;
     saveLife(paths, life);
+    if (sent && firstSpeak) addMilestone(paths, config, "第一次主动找你");
   }
 }

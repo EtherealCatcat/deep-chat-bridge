@@ -8,7 +8,7 @@ import { paths } from "../src/config.js";
 const roots: string[] = [];
 
 function tempPaths() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chatbridge-avatar-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "deephome-avatar-"));
   roots.push(root);
   const p = paths(root);
   fs.mkdirSync(p.media, { recursive: true });

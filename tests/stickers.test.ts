@@ -5,7 +5,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { ensureLayout, paths } from "../src/config.js";
 import { ensureStickers, findSticker, stickerFile, stickerPrompt } from "../src/stickers.js";
 
-const root = fs.mkdtempSync(path.join(os.tmpdir(), "chatbridge-stickers-"));
+const root = fs.mkdtempSync(path.join(os.tmpdir(), "deephome-stickers-"));
 const p = paths(root);
 ensureLayout(p);
 
@@ -25,7 +25,7 @@ describe("sticker pack", () => {
   });
 
   it("replaces old v1 image stickers and emoji with the static pack", () => {
-    const secondRoot = fs.mkdtempSync(path.join(os.tmpdir(), "chatbridge-stickers-migrate-"));
+    const secondRoot = fs.mkdtempSync(path.join(os.tmpdir(), "deephome-stickers-migrate-"));
     const second = paths(secondRoot);
     ensureLayout(second);
     fs.writeFileSync(path.join(second.stickers, "hello.webp"), "old");

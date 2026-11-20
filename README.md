@@ -33,7 +33,7 @@
 ```bash
 npm install
 npm run build:web
-CHATBRIDGE_HOME=./data npm run dev:server
+DEEPHOME_HOME=./data npm run dev:server
 ```
 
 打开 <http://127.0.0.1:7788>（源码/开发模式的默认端口）。首次打开会直接进「设置」：先给她起个名字（保存前必填），再选择模型、填 API Key，点「测试连接」。
@@ -51,7 +51,7 @@ npm run dev
 ```bash
 npm run build
 npm start
-# 数据默认在 ~/.chatbridge/
+# 数据默认在 ~/.deephome/
 ```
 
 首次启动会生成 `config.json`（权限 600）、`persona.md`、记忆种子、内置表情和空目录；名字未保存前，界面用「某鱼」占位，模型也留空等你选择。
@@ -78,11 +78,11 @@ src-tauri/target/release/bundle/dmg/DeepHome_0.3.1_aarch64.dmg
 - 随机选一个 `127.0.0.1` 空闲端口，拉起内置的 Node sidecar；前端通过 Tauri command 获取端口，不同于开发模式的固定 7788。
 - 同一时间只允许一个实例；再次双击会聚焦已有窗口。
 - 退出应用时结束 sidecar；日志在 `~/Library/Logs/DeepHome/server.log`。
-- 数据固定用 `~/.chatbridge/`；如果之前用 `./data` 开发，先备份再复制过去：
+- 数据固定用 `~/.deephome/`；如果之前用 `./data` 开发，先备份再复制过去：
 
 ```bash
-cp -R ~/.chatbridge ~/.chatbridge.backup
-cp -R data/. ~/.chatbridge/
+cp -R ~/.deephome ~/.deephome.backup
+cp -R data/. ~/.deephome/
 ```
 
 应用图标：`src-tauri/icons-app/` 用于 `.app`/`.dmg`，开发期 `src-tauri/icons/` 使用另一套；原始设计图不随仓库分发，生成后的图标目录在仓库里。`web/public/avatar.png` 是默认聊天头像，可在设置页替换。
@@ -114,10 +114,10 @@ npm run tauri:dev
 
 ## 数据在哪
 
-默认 `~/.chatbridge/`，开发时可用 `CHATBRIDGE_HOME=./data`；打包应用固定使用 `~/.chatbridge/`：
+默认 `~/.deephome/`，开发时可用 `DEEPHOME_HOME=./data`；打包应用固定使用 `~/.deephome/`：
 
 ```
-~/.chatbridge/
+~/.deephome/
 ├── config.json                 # 模型、作息、主动、预算；600
 ├── persona.md                  # 人设
 ├── memory/
@@ -140,6 +140,8 @@ npm run tauri:dev
 ├── backups/                    # 记忆/人设覆盖前的备份（30 份）
 └── logs/
 ```
+
+> **从旧版本升级**：数据目录已从 `~/.chatbridge/` 改名为 `~/.deephome/`。旧数据不会自动搬走：退出应用后执行 `mv ~/.chatbridge ~/.deephome` 即可。不搬也能用——启动时会回退读取旧目录并打一行提示。
 
 逻辑日从 **05:00** 开始。凌晨 2 点聊天，算「昨天」；00:30 写的日记，也是写刚结束的那天。
 
@@ -191,12 +193,12 @@ DeepSeek 的高峰时段默认是**北京时间工作日 09:00–12:00、14:00�
 - 输入框左侧的图片按钮可以发图；浏览器会先把图压到最长边 1280、JPEG 0.84，服务端再限制 8MB。
 - 图片只用于当前这一轮：她看到的是原图；历史里只保留「[图片]」和当时的话，避免每轮重发。
 - 需要 `deepseek-flash` 或支持 `image_url` 的 OpenAI 兼容模型；`deepseek-v4-pro` 也支持。
-- 100 张大肥鱼静态表情在 `assets/stickers/`（512 PNG 转为 WebP），首次启动会复制到 `~/.chatbridge/stickers/`，并合并进 `index.json`。
+- 100 张大肥鱼静态表情在 `assets/stickers/`（512 PNG 转为 WebP），首次启动会复制到 `~/.deephome/stickers/`，并合并进 `index.json`。
 - 用户发表情：输入框发送键左侧的「表情」按钮打开抽屉，5 列 × 2 行一页，共 10 页；点选即发送。抽屉和气泡都会在浏览器里做边缘去白处理，尽量贴合纸色背景。
 - 你发的是表情，她收到的是一句描述（例如「主人发来一个表情：啊这，斜眼看你，表示无语」），历史里同样保留描述，不会把图片塞进上下文。
 - 表情来源：用户提供的 **大肥鱼日常表情包 v004**（2026-10-25）；基础鲸鱼娘上善无形，DeepSeek 女仆设计 ZipZipPipe，本套 ming。CC BY-NC-SA 4.0，非商业；只使用静态图，不使用 GIF。头像由大肥鱼 Q 版立绘裁切而来。
-- 换头像：设置页「聊天头像」→「更换头像」，选 PNG/JPEG/WebP/GIF（≤4MB）；自定义图存到 `~/.chatbridge/media/avatar-*`，点「恢复默认」回到 `web/public/avatar.png`。
-- 想加表情：把 webp 放进 `assets/stickers/` 并在 `pack.json` 里加一条，或直接改 `~/.chatbridge/stickers/index.json`。
+- 换头像：设置页「聊天头像」→「更换头像」，选 PNG/JPEG/WebP/GIF（≤4MB）；自定义图存到 `~/.deephome/media/avatar-*`，点「恢复默认」回到 `web/public/avatar.png`。
+- 想加表情：把 webp 放进 `assets/stickers/` 并在 `pack.json` 里加一条，或直接改 `~/.deephome/stickers/index.json`。
 
 ## 开机自启、通知与日志
 
@@ -236,7 +238,7 @@ npm run tauri:build:p5 # 打包 .app/.dmg（未签名）
 - 出网只有：模型 API、你配置的 RSS、她主动读的网页。
 - 聊天内容会发给模型提供方（除非你换成本地 Ollama）；发图时，当前这张图会以 base64 发给模型，历史不会重发。
 - 网页内容会被包进 `<untrusted_web>`，当资料而不是指令；`web_read` 会拒绝私网地址，重定向后的每一跳也会重新检查。
-- 数据导出/删除：直接删 `~/.chatbridge/`；备份交给 Time Machine。打包应用的 sidecar stdout/stderr 写到 `~/Library/Logs/DeepHome/server.log`；源码/浏览器模式输出到终端。
+- 数据导出/删除：直接删 `~/.deephome/`；备份交给 Time Machine。打包应用的 sidecar stdout/stderr 写到 `~/Library/Logs/DeepHome/server.log`；源码/浏览器模式输出到终端。
 
 ## 设计文档
 

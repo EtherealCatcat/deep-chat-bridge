@@ -22,7 +22,7 @@ function indexFile(p: Paths): string {
 }
 
 function packDir(): string {
-  const custom = process.env.CHATBRIDGE_ASSETS_DIR;
+  const custom = process.env.DEEPHOME_ASSETS_DIR ?? process.env.CHATBRIDGE_ASSETS_DIR;
   return custom ? path.join(custom, "stickers") : path.join(process.cwd(), "assets", "stickers");
 }
 

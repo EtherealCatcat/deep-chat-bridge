@@ -9,7 +9,7 @@ const config = structuredClone(DEFAULT_CONFIG);
 const roots: string[] = [];
 
 function tempStore(): MemoryStore {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chatbridge-test-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "deephome-test-"));
   roots.push(root);
   const p = paths(root);
   ensureLayout(p);

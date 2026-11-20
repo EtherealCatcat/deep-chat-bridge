@@ -22,9 +22,23 @@ export interface Paths {
   media: string;
 }
 
+/** 现行数据目录；`~/.chatbridge` 只在迁移期兜底，下个版本删掉。 */
+const HOME_DIR = ".deephome";
+const LEGACY_HOME_DIR = ".chatbridge";
+
 export function dataRoot(): string {
-  const custom = process.env.CHATBRIDGE_HOME;
-  return path.resolve(custom && custom.trim() ? custom : path.join(os.homedir(), ".chatbridge"));
+  const custom = process.env.DEEPHOME_HOME ?? process.env.CHATBRIDGE_HOME;
+  if (custom && custom.trim()) return path.resolve(custom);
+  const home = os.homedir();
+  const preferred = path.join(home, HOME_DIR);
+  const legacy = path.join(home, LEGACY_HOME_DIR);
+  if (!fs.existsSync(preferred) && fs.existsSync(legacy)) {
+    console.warn(
+      `[deephome] 仍在读旧数据目录 ${legacy}；迁移请先退出应用，再执行：mv ~/.chatbridge ~/.deephome`,
+    );
+    return legacy;
+  }
+  return preferred;
 }
 
 export function paths(root = dataRoot()): Paths {
@@ -168,7 +182,11 @@ export function loadConfig(p: Paths): AppConfig {
   const config = deepMerge(DEFAULT_CONFIG, raw);
   if (!config.model.apiKey) {
     config.model.apiKey =
-      process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? process.env.CHATBRIDGE_API_KEY ?? "";
+      process.env.DEEPSEEK_API_KEY ??
+      process.env.OPENAI_API_KEY ??
+      process.env.DEEPHOME_API_KEY ??
+      process.env.CHATBRIDGE_API_KEY ??
+      "";
   }
   if (!fs.existsSync(p.config)) saveConfig(p, config);
   return config;

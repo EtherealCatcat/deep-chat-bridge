@@ -639,7 +639,7 @@ if (exists(path.join(staticRoot, "index.html"))) {
   }));
 }
 
-const port = Number(process.env.CHATBRIDGE_PORT) || Number(config.ui.port) || 7788;
+const port = Number(process.env.DEEPHOME_PORT ?? process.env.CHATBRIDGE_PORT) || Number(config.ui.port) || 7788;
 try {
   await app.listen({ host: "127.0.0.1", port });
   scheduler.start();

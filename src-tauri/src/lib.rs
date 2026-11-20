@@ -224,8 +224,8 @@ fn spawn_server(app: &tauri::AppHandle) -> Result<(u16, Child), String> {
   let port = free_port()?;
   let mut child = Command::new(&node)
     .arg(&server)
-    .env("CHATBRIDGE_PORT", port.to_string())
-    .env("CHATBRIDGE_ASSETS_DIR", &assets)
+    .env("DEEPHOME_PORT", port.to_string())
+    .env("DEEPHOME_ASSETS_DIR", &assets)
     .stdout(Stdio::piped())
     .stderr(Stdio::piped())
     .spawn()

@@ -1,12 +1,12 @@
 {
-  "name": "chatbridge",
+  "name": "deep-home",
   "version": "0.3.1",
   "private": true,
   "type": "module",
   "description": "A local, file-based companion who lives in a little room on your Mac.",
   "scripts": {
     "dev": "concurrently -k -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
-    "dev:server": "CHATBRIDGE_HOME=./data tsx watch src/server.ts",
+    "dev:server": "DEEPHOME_HOME=./data tsx watch src/server.ts",
     "dev:web": "vite --config web/vite.config.ts",
     "build": "npm run build:server && npm run build:web",
     "build:server": "tsc -p tsconfig.server.json",

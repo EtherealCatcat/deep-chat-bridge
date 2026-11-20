@@ -26,6 +26,7 @@ import { findSticker, listStickers } from "./stickers.js";
 import { avatarFile, avatarInfo, clearAvatar, saveAvatar } from "./avatar.js";
 import { loadOwn, markOwnSeen, ownStateSnapshot, saveOwn } from "./own.js";
 import { readOwnLog } from "./web.js";
+import { isAllowedOrigin, isLoopbackOrigin, isRequestOriginAllowed } from "./security.js";
 import { backupFile, exists, readText, writeText } from "./store.js";
 import { dayKey, formatClock, weekdayCN } from "./time.js";
 import type { ServerEvent } from "./events.js";
@@ -54,7 +55,25 @@ memory.ensure();
 updateStreak(p, config);
 
 const app = Fastify({ logger: { level: "warn" }, bodyLimit: 20 * 1024 * 1024 });
-await app.register(cors, { origin: true, methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"] });
+await app.register(cors, {
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    cb(null, isAllowedOrigin(origin) || isLoopbackOrigin(origin));
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+});
+
+// CORS headers alone do not stop simple requests from executing. Reject foreign
+// origins outright so a random web page cannot read memories, send messages, or
+// spend the daily budget while she is running.
+app.addHook("onRequest", async (request, reply) => {
+  if (isRequestOriginAllowed(request.headers.origin, request.headers.host)) return;
+  request.log.warn(
+    { origin: request.headers.origin, host: request.headers.host, url: request.url },
+    "blocked cross-origin request",
+  );
+  return reply.code(403).send({ error: "这个来源不被允许。" });
+});
 
 const clients = new Set<NodeJS.WritableStream & { write: (chunk: string) => boolean }>();
 let unread = 0;
@@ -129,13 +148,20 @@ app.get("/api/status", async () => currentStatus());
 app.get("/api/events", async (request, reply) => {
   reply.hijack();
   const res = reply.raw;
-  res.writeHead(200, {
+  const headers: Record<string, string> = {
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
     Connection: "keep-alive",
     "X-Accel-Buffering": "no",
-    "Access-Control-Allow-Origin": "*",
-  });
+  };
+  // The hijacked response bypasses @fastify/cors, so reflect the (already
+  // validated) origin here instead of the previous wildcard.
+  const origin = request.headers.origin;
+  if (origin) {
+    headers["Access-Control-Allow-Origin"] = origin;
+    headers["Vary"] = "Origin";
+  }
+  res.writeHead(200, headers);
   clients.add(res as unknown as NodeJS.WritableStream & { write: (chunk: string) => boolean });
   res.write(`retry: 3000\n\n`);
   res.write(`data: ${JSON.stringify({ type: "status", status: currentStatus() })}\n\n`);

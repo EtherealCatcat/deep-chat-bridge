@@ -69,24 +69,66 @@ export async function assertSafeUrl(raw: string): Promise<URL> {
   return url;
 }
 
-async function fetchText(raw: string): Promise<{ finalUrl: string; contentType: string; text: string }> {
-  const url = await assertSafeUrl(raw);
-  const response = await fetch(url, {
-    redirect: "follow",
-    signal: AbortSignal.timeout(20_000),
-    headers: {
-      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ChatBridge/0.1",
-      accept: "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5",
-    },
-  });
-  if (!response.ok) throw new WebError(`网页打不开（HTTP ${response.status}）。`);
-  const finalUrl = response.url || raw;
-  const length = Number(response.headers.get("content-length") ?? 0);
-  if (length > MAX_BYTES) throw new WebError("这个网页太大了，先不看了。");
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.length > MAX_BYTES) throw new WebError("这个网页太大了，先不看了。");
-  const contentType = response.headers.get("content-type") ?? "";
-  return { finalUrl, contentType, text: buffer.toString("utf8") };
+const MAX_REDIRECTS = 5;
+
+export type FetchLike = (input: URL, init: RequestInit) => Promise<Response>;
+
+export interface FetchTextDeps {
+  fetchImpl?: FetchLike;
+  assertUrl?: (raw: string) => Promise<URL>;
+}
+
+function isRedirect(status: number): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+export async function fetchText(
+  raw: string,
+  deps: FetchTextDeps = {},
+): Promise<{ finalUrl: string; contentType: string; text: string }> {
+  const assertUrl = deps.assertUrl ?? assertSafeUrl;
+  const doFetch = deps.fetchImpl ?? fetch;
+  // One deadline for the whole chain, so redirects cannot multiply the timeout.
+  const signal = AbortSignal.timeout(20_000);
+  let url = await assertUrl(raw);
+  // Follow redirects by hand: assertSafeUrl only vetted the first URL, so a
+  // public page could otherwise 302 straight into 127.0.0.1 or a private IP.
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const response = await doFetch(url, {
+      redirect: "manual",
+      signal,
+      headers: {
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ChatBridge/0.1",
+        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5",
+      },
+    });
+    if (isRedirect(response.status)) {
+      const location = response.headers.get("location");
+      try {
+        await response.body?.cancel();
+      } catch {
+        // the body may already be unusable; the redirect target is what matters
+      }
+      if (!location) throw new WebError("网页跳转没给地址。");
+      let next: URL;
+      try {
+        next = new URL(location, url);
+      } catch {
+        throw new WebError("网页跳转到了奇怪的地方。");
+      }
+      url = await assertUrl(next.toString());
+      continue;
+    }
+    if (!response.ok) throw new WebError(`网页打不开（HTTP ${response.status}）。`);
+    const finalUrl = url.toString();
+    const length = Number(response.headers.get("content-length") ?? 0);
+    if (length > MAX_BYTES) throw new WebError("这个网页太大了，先不看了。");
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > MAX_BYTES) throw new WebError("这个网页太大了，先不看了。");
+    const contentType = response.headers.get("content-type") ?? "";
+    return { finalUrl, contentType, text: buffer.toString("utf8") };
+  }
+  throw new WebError("这个网页跳转太多次了。");
 }
 
 export async function webRead(raw: string): Promise<{ title: string; url: string; text: string }> {

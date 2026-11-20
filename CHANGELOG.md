@@ -4,6 +4,13 @@
 
 当前主线为 `main`（2026-11-20）。后续并行功能分支请从最新 `main` 拉出，合并时把条目补到下一个版本。
 
+## [未发布]
+
+### 安全
+
+- **本机 API 来源校验**：CORS 不再反射任意 `Origin`，只接受应用自身来源（`127.0.0.1` / `localhost` 同端口互换）、Vite 开发服务器（`127.0.0.1:5173`、`localhost:5173`）和 Tauri WebView（`tauri://localhost`、`http(s)://tauri.localhost`）。服务端新增 `onRequest` 校验：陌生 `Origin` 直接 403，`Host` 必须是回环地址，防止 DNS rebinding；SSE 也不再返回通配符 `Access-Control-Allow-Origin`。
+- **网页抓取重定向校验**：`web_read` / `web_search` 改为手动跟随最多 5 跳重定向，每一跳都重新校验目标必须是 http(s) 且不指向本机或私网，避免公网页面 302 到内网地址。
+
 ## [0.3.1] - 2026-11-20
 
 ### 新增

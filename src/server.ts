@@ -144,7 +144,7 @@ function paramDay(params: unknown): string {
 app.get("/api/health", async () => ({
   ok: true,
   name: config.name.trim() || "某鱼",
-  version: "0.3.1",
+  version: "0.3.2",
   root,
   hasKey: Boolean(config.model.apiKey),
   time: Date.now(),

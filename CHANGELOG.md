@@ -4,10 +4,11 @@
 
 当前主线为 `main`（2026-11-20）。后续并行功能分支请从最新 `main` 拉出，合并时把条目补到下一个版本。
 
-## [未发布]
+## [0.3.2] - 2026-11-21
 
 ### 变更
 
+- 版本统一到 `0.3.2`（package、Cargo、Tauri、health、User-Agent）。
 - **项目统一命名为 DeepHome**：开发侧遗留的 `chatBridge` 全部收敛到用户侧已在用的 `DeepHome`。仓库名 `deep-chat-bridge` → `deep-home`，npm 包名 `chatbridge` → `deep-home`，数据目录 `~/.chatbridge/` → `~/.deephome/`，环境变量前缀 `CHATBRIDGE_*` → `DEEPHOME_*`（`DEEPHOME_HOME` / `DEEPHOME_PORT` / `DEEPHOME_ASSETS_DIR` / `DEEPHOME_API_KEY`），出站 User-Agent 改为 `DeepHome/<版本>`。
 - **兼容期**：`~/.deephome/` 不存在而 `~/.chatbridge/` 存在时，自动回退读取旧目录并在终端提示；环境变量与数据目录均为新名优先、旧名兜底，下个版本移除旧名。迁移：退出应用后 `mv ~/.chatbridge ~/.deephome`。
 

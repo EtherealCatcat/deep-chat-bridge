@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { avatarFile, avatarInfo, clearAvatar, saveAvatar } from "../src/avatar.js";
 import { paths } from "../src/config.js";
 
@@ -43,6 +43,22 @@ describe("avatar storage", () => {
     expect(info.custom).toBe(false);
     expect(info.url).toBe("/avatar.png");
     expect(avatarFile(p)).toBeNull();
+  });
+
+  it("keeps versions unique when two saves share a millisecond", () => {
+    const p = tempPaths();
+    const spy = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    try {
+      saveAvatar(p, PNG);
+      const first = avatarFile(p)?.file;
+      const firstVersion = avatarInfo(p).updatedAt;
+      saveAvatar(p, PNG);
+      const second = avatarFile(p)?.file;
+      expect(second).not.toBe(first);
+      expect(avatarInfo(p).updatedAt).toBeGreaterThan(firstVersion);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("rejects non-images", () => {

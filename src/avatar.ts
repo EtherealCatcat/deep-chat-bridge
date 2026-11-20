@@ -65,8 +65,13 @@ export function saveAvatar(p: Paths, dataUrl: string): AvatarInfo {
   if (!mime) throw new Error("看起来不是有效的图片文件。");
 
   const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : mime === "image/gif" ? "gif" : "jpg";
-  const file = `avatar-${Date.now()}.${ext}`;
-  const updatedAt = Date.now();
+  // Two saves can land in the same millisecond (fast disks, CI runners). Keep
+  // the version strictly increasing so the filename changes and the `?v=`
+  // cache buster does too.
+  const previous = readMeta(p);
+  const now = Date.now();
+  const updatedAt = previous && now <= previous.updatedAt ? previous.updatedAt + 1 : now;
+  const file = `avatar-${updatedAt}.${ext}`;
   fs.writeFileSync(path.join(p.media, file), data, { mode: 0o600 });
   writeJson(metaFile(p), { file, mime, updatedAt } satisfies AvatarMeta);
 
